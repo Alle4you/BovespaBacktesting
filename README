@@ -1,0 +1,3 @@
+O projeto é um conjunto de scripts em Python que tem por fim baixar aqueles ZIPs disfarçados do saite da Bovespa (http://www.bmfbovespa.com.br/) e manipular os dados disponíveis, como balanços.
+
+Através dessa mineração de dados o objetivo final é tornar simples o batimento e consolidação de informações.

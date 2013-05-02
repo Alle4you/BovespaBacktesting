@@ -1,4 +1,10 @@
-import urllib2, zipfile, StringIO, re, datetime
+import datetime
+import re
+import StringIO
+import urllib2
+import xml.etree
+import zipfile
+
 
 def geturl(cvmcode, pubdata):
     return 'http://www.bmfbovespa.com.br/dxw/Download.asp?moeda=L&site=B&mercado=18&ccvm=' + str(cvmcode) + '&data=' + pubdata + '&tipo=2'
@@ -6,7 +12,7 @@ def geturl(cvmcode, pubdata):
 def getquoteurl(year):
     return 'http://www.bmfbovespa.com.br/InstDados/SerHist/COTAHIST_A' + str(year) + '.ZIP'
 
-def getzip(url):
+def CarregaArquivoZip(url):
     webRes = urllib2.urlopen(url)
     doc = webRes.read()
     return zipfile.ZipFile(StringIO.StringIO(doc))
@@ -19,7 +25,7 @@ def opendoc(cvmcode, year):
     pubdata = '31/12/' + str(year)
     url = geturl(cvmcode, pubdata)
     try:
-        zip = getzip(url)
+        zip = CarregaArquivoZip(url)
         for name in ['DFPCDERE.001', 'WINDOWS/TEMP_CVM/DFPCDERE.001']:
             if name in zip.namelist():
                 doc = zip.read(name)
@@ -49,7 +55,7 @@ def openquotedoc(year):
     """
     url = getquoteurl(year)
     try:
-        zip = getzip(url)
+        zip = CarregaArquivoZip(url)
         docname = getquotedocname(year)
         if docname in zip.namelist():
             return zip.read(docname)
@@ -120,4 +126,42 @@ def loadquotelines(beginYear, endYear):
         lines = doc.split('\n')
         totalLines = totalLines + lines
     return totalLines
+
+def filter_findoc(path):
+    import xml.etree.ElementTree as ET
+    tree = ET.parse(path)
+    root = tree.getroot()
+    newTree = ET.ElementTree()
+    newRoot = ET.Element('Data')
+    finLista = root.findall('InfoFinaDFin')    
+    for finInfo in root.iter('InfoFinaDFin'):
+        newEntry = ET.Element('InfoFinaDFin')
+        newEntry.append(finInfo.find('PlanoConta').find('NumeroConta'))
+        newEntry.append(finInfo.find('DescricaoConta1'))
+        newEntry.append(finInfo.find('ValorConta1'))
+        newEntry.append(finInfo.find('ValorConta2'))
+        newEntry.append(finInfo.find('ValorConta3'))
+        newRoot.append(newEntry)
+    newTree._setroot(newRoot)
+    newTree.write(path[:-4] + '-result.xml')
+
+def catalog_findoc(url):
+    webRes = urllib2.urlopen(url)
+    content = webRes.read()
+    zip = zipfile.ZipFile(StringIO.StringIO(content))
+    formName = 'FormularioDemonstracaoFinanceiraDFP.xml'
+    if formName in zip.namelist():
+        xmlFile = zip.read(formName)
+        dfp = xml.etree.ElementTree.fromstring(xmlFile)
+        cia = dfp.find('CompanhiaAberta').find('NomeRazaoSocialCompanhiaAberta').text.strip()
+        data = dfp.find('DataReferenciaDocumento').text[0:10]
+        fileName = cia + '-' + data + '.zip'
+        file = open(fileName, 'wb')
+        file.write(content)
+        file.close()
+
+def download_findoc(docNumber):
+    urlbase = r'http://www.rad.cvm.gov.br/enetconsulta/frmDownloadDocumento.aspx?CodigoInstituicao=2&NumeroSequencialDocumento='
+    docUrl = urlbase + str(docNumber)
+    catalog_findoc(docUrl)
 

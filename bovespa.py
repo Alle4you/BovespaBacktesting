@@ -145,23 +145,39 @@ def filter_findoc(path):
     newTree._setroot(newRoot)
     newTree.write(path[:-4] + '-result.xml')
 
-def catalog_findoc(url):
-    webRes = urllib2.urlopen(url)
-    content = webRes.read()
-    zip = zipfile.ZipFile(StringIO.StringIO(content))
-    formName = 'FormularioDemonstracaoFinanceiraDFP.xml'
-    if formName in zip.namelist():
-        xmlFile = zip.read(formName)
-        dfp = xml.etree.ElementTree.fromstring(xmlFile)
-        cia = dfp.find('CompanhiaAberta').find('NomeRazaoSocialCompanhiaAberta').text.strip()
-        data = dfp.find('DataReferenciaDocumento').text[0:10]
-        fileName = cia + '-' + data + '.zip'
+
+def catalog_findoc(docNumber, url):
+    import xml.etree.ElementTree as ET
+
+    try:
+        webRes = urllib2.urlopen(url)
+        content = webRes.read()
+        fileName = str(docNumber) + '.zip'
+
+        try:
+            zip = zipfile.ZipFile(StringIO.StringIO(content))
+            if 'FormularioCadastral.xml' in zip.namelist():
+                    xmlFile = zip.read('FormularioCadastral.xml')
+                    dfp = ET.fromstring(xmlFile)
+                    cia = dfp.find('CompanhiaAberta').find('NomeRazaoSocialCompanhiaAberta').text.strip()
+                    data = dfp.find('DataReferenciaDocumento').text[0:10]
+                    fileName = str(docNumber) + '-' + cia + '-' + data + '.zip'
+                    #print 'Arquivo ' + fileName + ' salvo com sucesso!'
+            else:
+                print 'Arquivo #' + str(docNumber) + ' nao possui formulario; ignorando...'
+        except BadZipFile:
+            print 'Arquivo #' + str(docNumber) + ' invalido; ignorando...'
+
         file = open(fileName, 'wb')
         file.write(content)
         file.close()
 
+    except Exception as e:
+        print 'Erro fatal com arquivo #' + str(docNumber) + ':' + str(e)
+
+
 def download_findoc(docNumber):
     urlbase = r'http://www.rad.cvm.gov.br/enetconsulta/frmDownloadDocumento.aspx?CodigoInstituicao=2&NumeroSequencialDocumento='
     docUrl = urlbase + str(docNumber)
-    catalog_findoc(docUrl)
+    catalog_findoc(docNumber, docUrl)
 

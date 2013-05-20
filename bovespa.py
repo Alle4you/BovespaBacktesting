@@ -162,12 +162,13 @@ def catalog_findoc(docNumber, url):
                     xmlFile = zip.read('FormularioCadastral.xml')
                     dfp = ET.fromstring(xmlFile)
                     cia = dfp.find('CompanhiaAberta').find('NomeRazaoSocialCompanhiaAberta').text.strip()
+                    cia = re.sub('[/]', '-', cia)
                     data = dfp.find('DataReferenciaDocumento').text[0:10]
                     fileName = str(docNumber) + '-' + cia + '-' + data + '.zip'
                     #print 'Arquivo ' + fileName + ' salvo com sucesso!'
             else:
                 print 'Arquivo #' + str(docNumber) + ' nao possui formulario; ignorando...'
-        except BadZipFile:
+        except:
             print 'Arquivo #' + str(docNumber) + ' invalido; ignorando...'
 
         file = open(fileName, 'wb')

@@ -158,16 +158,23 @@ def catalog_findoc(docNumber, url):
 
         try:
             zip = zipfile.ZipFile(StringIO.StringIO(content))
-            if 'FormularioCadastral.xml' in zip.namelist():
-                    xmlFile = zip.read('FormularioCadastral.xml')
-                    dfp = ET.fromstring(xmlFile)
-                    cia = dfp.find('CompanhiaAberta').find('NomeRazaoSocialCompanhiaAberta').text.strip()
-                    cia = re.sub('[/]', '-', cia)
-                    data = dfp.find('DataReferenciaDocumento').text[0:10]
-                    fileName = str(docNumber) + '-' + cia + '-' + data + '.zip'
-                    #print 'Arquivo ' + fileName + ' salvo com sucesso!'
+
+            xmlName = None
+            for name in [ 'FormularioDemonstracaoFinanceiraDFP.xml', 'FormularioDemonstracaoFinanceiraITR.xml' ]:
+                if name in zip.namelist():
+                    xmlName = name
+                    break
+            if xmlName != None:
+                xmlFile = zip.read(xmlName)
+                dfp = ET.fromstring(xmlFile)
+                cia = dfp.find('CompanhiaAberta').find('NomeRazaoSocialCompanhiaAberta').text.strip()
+                cia = re.sub('[/]', '-', cia)
+                data = dfp.find('DataReferenciaDocumento').text[0:10]
+                fileName = str(docNumber) + '-' + cia + '-' + xmlName[-7:-4] + '-' + data + '.zip'
+                #print 'Arquivo ' + fileName + ' salvo com sucesso!'
             else:
                 print 'Arquivo #' + str(docNumber) + ' nao possui formulario; ignorando...'
+
         except:
             print 'Arquivo #' + str(docNumber) + ' invalido; ignorando...'
 

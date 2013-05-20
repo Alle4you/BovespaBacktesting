@@ -135,13 +135,15 @@ def filter_findoc(path):
     newRoot = ET.Element('Data')
     finLista = root.findall('InfoFinaDFin')    
     for finInfo in root.iter('InfoFinaDFin'):
-        newEntry = ET.Element('InfoFinaDFin')
-        newEntry.append(finInfo.find('PlanoConta').find('NumeroConta'))
-        newEntry.append(finInfo.find('DescricaoConta1'))
-        newEntry.append(finInfo.find('ValorConta1'))
-        newEntry.append(finInfo.find('ValorConta2'))
-        newEntry.append(finInfo.find('ValorConta3'))
-        newRoot.append(newEntry)
+        finCode = finInfo.find('PlanoConta').find('VersaoPlanoConta').find('CodigoTipoInformacaoFinanceira')
+        if finCode.text == '2': # informacoes consolidadas
+            newEntry = ET.Element('InfoFinaDFin')
+            newEntry.append(finInfo.find('PlanoConta').find('NumeroConta'))
+            newEntry.append(finInfo.find('DescricaoConta1'))
+            newEntry.append(finInfo.find('ValorConta1'))
+            newEntry.append(finInfo.find('ValorConta2'))
+            newEntry.append(finInfo.find('ValorConta3'))
+            newRoot.append(newEntry)
     newTree._setroot(newRoot)
     newTree.write(path[:-4] + '-result.xml')
 

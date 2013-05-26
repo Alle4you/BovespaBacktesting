@@ -319,9 +319,20 @@ def get_week_quote(quote):
     return ret
 
 
-def get_sma(quote, days):
+def get_sma(price, days):
     ret = []
-    for i in range(len(quote['closePrice'])):
-        l = quote['closePrice'][ max(i - days + 1, 0) : i + 1 ]
+    for i in range(len(price)):
+        l = price[ max(i - days + 1, 0) : i + 1 ]
         ret.append( sum(l) / len(l) )
+    return ret
+
+def get_ema(quote, days):
+    sma = 'sma-' + str(days)
+    ema = 'ema-' + str(days)
+    ret = { sma: get_sma(quote['closePrice'], days), ema: [] }
+    for i in range(days):
+        ret[ema].append(ret[sma][i])
+    multiplier = ( 2.0 / (float(days) + 1.0) )
+    for i in range(days, len(ret[sma])):
+        ret[ema].append( (quote['closePrice'][i] - ret[ema][i-1]) * multiplier + ret[ema][i-1] )
     return ret

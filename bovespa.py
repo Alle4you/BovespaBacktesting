@@ -317,3 +317,11 @@ def get_week_quote(quote):
         weekNumber = quote['date'][i].isocalendar()[1]
         upd_week(i) if get_week_quote.currWeekNumber == weekNumber else init_week(i)
     return ret
+
+
+def get_sma(quote, days):
+    ret = []
+    for i in range(len(quote['closePrice'])):
+        l = quote['closePrice'][ max(i - days + 1, 0) : i + 1 ]
+        ret.append( sum(l) / len(l) )
+    return ret

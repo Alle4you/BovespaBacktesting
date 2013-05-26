@@ -161,4 +161,8 @@ pip-log.txt
 
 # Mac crap
 .DS_Store
+
+# Mine
 *.zip
+*.csv
+data

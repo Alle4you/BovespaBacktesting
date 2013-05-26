@@ -4,6 +4,12 @@ import StringIO
 import urllib2
 import xml.etree
 import zipfile
+import os
+import pickle
+
+DATA_PATH = 'data'
+QUOTE_FILE_NAME = 'quote'
+QUOTE_WEEK_FILE_NAME = 'week'
 
 
 def geturl(cvmcode, pubdata):
@@ -148,7 +154,32 @@ def filter_findoc(path):
     newTree.write(path[:-4] + '-result.xml')
 
 
-def catalog_findoc(docNumber, url):
+def catalog_findoc_zip(zip, fileNameTip = ''):
+    import xml.etree.ElementTree as ET
+
+    try:
+        xmlName = None
+        for name in [ 'FormularioDemonstracaoFinanceiraDFP.xml', 'FormularioDemonstracaoFinanceiraITR.xml' ]:
+            if name in zip.namelist():
+                xmlName = name
+                break
+        if xmlName != None:
+            xmlFile = zip.read(xmlName)
+            dfp = ET.fromstring(xmlFile)
+            cia = dfp.find('CompanhiaAberta').find('NomeRazaoSocialCompanhiaAberta').text.strip()
+            cia = re.sub('[/]', '-', cia)
+            data = dfp.find('DataReferenciaDocumento').text[0:10]
+            fileNameTip = cia + '-' + xmlName[-7:-4] + '-' + data + '.zip'
+            #print 'Arquivo ' + fileName + ' salvo com sucesso!'
+        else:
+            print 'Arquivo ' + fileNameTip + ' nao possui formulario; ignorando...'
+    except Exception as e:
+        print 'Erro analisando arquivo: ' + str(e)
+    return fileNameTip
+
+
+
+def catalog_findoc_url(url, docNumber):
     import xml.etree.ElementTree as ET
 
     try:
@@ -158,23 +189,7 @@ def catalog_findoc(docNumber, url):
 
         try:
             zip = zipfile.ZipFile(StringIO.StringIO(content))
-
-            xmlName = None
-            for name in [ 'FormularioDemonstracaoFinanceiraDFP.xml', 'FormularioDemonstracaoFinanceiraITR.xml' ]:
-                if name in zip.namelist():
-                    xmlName = name
-                    break
-            if xmlName != None:
-                xmlFile = zip.read(xmlName)
-                dfp = ET.fromstring(xmlFile)
-                cia = dfp.find('CompanhiaAberta').find('NomeRazaoSocialCompanhiaAberta').text.strip()
-                cia = re.sub('[/]', '-', cia)
-                data = dfp.find('DataReferenciaDocumento').text[0:10]
-                fileName = str(docNumber) + '-' + cia + '-' + xmlName[-7:-4] + '-' + data + '.zip'
-                #print 'Arquivo ' + fileName + ' salvo com sucesso!'
-            else:
-                print 'Arquivo #' + str(docNumber) + ' nao possui formulario; ignorando...'
-
+            fileName = catalog_findoc_zip(zip, fileName)
         except:
             print 'Arquivo #' + str(docNumber) + ' invalido; ignorando...'
 
@@ -189,5 +204,116 @@ def catalog_findoc(docNumber, url):
 def download_findoc(docNumber):
     urlbase = r'http://www.rad.cvm.gov.br/enetconsulta/frmDownloadDocumento.aspx?CodigoInstituicao=2&NumeroSequencialDocumento='
     docUrl = urlbase + str(docNumber)
-    catalog_findoc(docNumber, docUrl)
+    catalog_findoc_url(docUrl, docNumber)
 
+def rename_findoc(path):
+    zip = zipfile.ZipFile(path, 'r')
+    return catalog_findoc_zip(zip)
+
+def read_quotedoc(path):
+    print path
+    ret = []
+    lines = list(open(path, 'r'))
+    for currLine in lines:
+        m = re.search(r'(\d+/\d+/\d+) ([0-9.]+) ([0-9.]+) ([0-9.]+) ([0-9.]+) ([0-9]+) ([0-9.]+) ([0-9.]+)', currLine)
+        if m:
+            ret.append(m.group(1, 2, 3, 4, 5, 6, 7, 8))
+    return ret
+
+def import_from_jgrafix(jgrafixDocsPath):
+    from os.path import isfile, join
+    filterPath = join(DATA_PATH, 'filterCodes')
+    quoteDocs = [ f for f in os.listdir(jgrafixDocsPath) if isfile(join(jgrafixDocsPath, f)) ]
+    filterCodes = [item.lower()[:-1] for item in list(open(filterPath, 'r'))]
+    filterDocs = [ f for f in quoteDocs if f in filterCodes ]
+    for doc in filterDocs:
+        quote = read_quotedoc(join(jgrafixDocsPath, doc))
+        if len(quote) > 0:
+            destPath = join(DATA_PATH, doc)
+            if not os.path.exists(destPath):
+                os.makedirs(destPath)
+            quoteDict = { 'date': [], 'openPrice': [], 'minPrice': [], 'maxPrice': [], 'closePrice': [], 'volume': [] }
+            for quoteDay in quote:
+                quoteDict['date'].append(datetime.date((int)(quoteDay[0][6:]), (int)(quoteDay[0][3:5]), (int)(quoteDay[0][0:2])) )
+                quoteDict['openPrice'].append(float(quoteDay[1]))
+                quoteDict['minPrice'].append(float(quoteDay[2]))
+                quoteDict['maxPrice'].append(float(quoteDay[3]))
+                quoteDict['closePrice'].append(float(quoteDay[4]))
+                quoteDict['volume'].append(float(quoteDay[7]))
+            destFile = join(destPath, QUOTE_FILE_NAME)
+            write_data(doc, QUOTE_FILE_NAME, quoteDict)
+            weekDict = get_week_quote(quoteDict)
+            write_data(doc, QUOTE_WEEK_FILE_NAME, weekDict)
+
+
+def load_data(code, dataName):
+    from os.path import isfile, join
+    code = code.lower()
+    codePath = join(join(DATA_PATH, code), dataName)
+    f = open(codePath, 'r')
+    ret = pickle.load(f)
+    f.close()
+    return ret
+
+
+def load_quote(code):
+    return load_data(code, QUOTE_FILE_NAME)
+
+
+def load_week_quote(code):
+    return load_data(code, QUOTE_WEEK_FILE_NAME)
+
+
+def get_quote_codes():
+    from os.path import isdir, join
+    ret = [ f for f in os.listdir(DATA_PATH) if isdir(join(DATA_PATH, f)) ]
+    return ret
+
+
+def write_data(code, dataName, data):
+    from os.path import isfile, join
+    code = code.lower()
+    codePath = join(join(DATA_PATH, code), dataName)
+    f = open(codePath, 'w')
+    pickle.dump(data, f)
+    f.close()
+
+
+def export_to_csv(data, filePath):
+    f = open(filePath, 'w')
+    maxLine = 100000000
+    dataKeys = data.keys()
+    for i in dataKeys:
+        f.write(str(i) + ';')
+        maxLine = min(maxLine, len(data[i]))
+    f.write('\n')
+    for i in range(0, maxLine):
+        for k in dataKeys:
+            f.write(str(data[k][i]) + ';')
+        f.write('\n')
+    f.close()
+
+
+def get_week_quote(quote):
+    ret = { 'date': [], 'openPrice': [], 'minPrice': [], 'maxPrice': [], 'closePrice': [], 'volume': [] }
+    get_week_quote.currWeekNumber = 0
+
+    def init_week(quotePos):
+        get_week_quote.currWeekNumber = quote['date'][quotePos].isocalendar()[1]
+        ret['date'].append(quote['date'][quotePos])
+        ret['openPrice'].append(quote['openPrice'][quotePos])
+        ret['minPrice'].append(quote['minPrice'][quotePos])
+        ret['maxPrice'].append(quote['maxPrice'][quotePos])
+        ret['closePrice'].append(quote['closePrice'][quotePos])
+        ret['volume'].append(quote['volume'][quotePos])
+
+    def upd_week(quotePos):
+        ret['minPrice'][-1] = min(ret['minPrice'][-1], quote['minPrice'][quotePos])
+        ret['maxPrice'][-1] = max(ret['maxPrice'][-1], quote['maxPrice'][quotePos])
+        ret['closePrice'][-1] = quote['closePrice'][quotePos]
+        ret['volume'][-1] += quote['volume'][quotePos]
+
+    for i in range(len(quote['date'])):
+        weekNumber = quote['date'][i].isocalendar()[1]
+        upd_week(i) if get_week_quote.currWeekNumber == weekNumber else init_week(i)
+    return ret

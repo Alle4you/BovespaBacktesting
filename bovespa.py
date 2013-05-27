@@ -319,7 +319,8 @@ def get_week_quote(quote):
     return ret
 
 
-def get_sma(price, days):
+def get_sma(quote, days = 10):
+    price = quote['closePrice']
     ret = []
     for i in range(len(price)):
         l = price[ max(i - days + 1, 0) : i + 1 ]
@@ -327,7 +328,8 @@ def get_sma(price, days):
     return ret
 
 
-def get_ema(price, days):
+def get_ema(quote, days = 10):
+    price = quote['closePrice']
     sma = get_sma(price[0:days], days)
     ret = []
     for i in range(days):
@@ -338,7 +340,8 @@ def get_ema(price, days):
     return ret
 
 
-def get_macd(price, shortDays = 12, longDays = 26, signalDays = 9):
+def get_macd(quote, shortDays = 12, longDays = 26, signalDays = 9):
+    price = quote['closePrice']
     shortMacd = get_ema(price, shortDays)
     longMacd = get_ema(price, longDays)
     macd = []
@@ -350,3 +353,29 @@ def get_macd(price, shortDays = 12, longDays = 26, signalDays = 9):
         hist.append(macd[i] - signal[i])
     ret = { 'macd': macd, 'signal': signal, 'hist': hist }
     return ret
+
+def get_stop_safeplace(quote, multiplier = 4):
+    price = quote['minPrice']
+    low = [ 0.0 ]
+    for i in range(1, len(price)):
+        low.append(price[i-1]-price[i] if price[i-1] > price[i] else 0.0)
+    lowSum = []
+    lowSumDays = 19
+    for i in range(len(price)):
+        l = low[ max(i - lowSumDays + 1, 0) : i + 1 ]
+        lowSum.append( sum(l) )
+    count = []
+    for i in range(len(price)):
+        count.append(1.0 if low[i] != 0.0 else 0.0)
+    countSum = []
+    for i in range(len(price)):
+        l = count[ max(i - lowSumDays + 1, 0) : i + 1 ]
+        countSum.append( sum(l) )
+    stop = []
+    for i in range(len(price)):
+        stop.append(0.0 if countSum[i] == 0.0 else lowSum[i] / countSum[i])
+    ret = []
+    for i in range(len(price)):
+        ret.append(price[i] if stop[i] == 0.0 else price[i] - (stop[i] * multiplier))
+    testRet = { 'low': low, 'lowSum': lowSum, 'count': count, 'countSum': countSum, 'stop': ret }
+    return testRet

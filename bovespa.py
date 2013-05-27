@@ -377,5 +377,32 @@ def get_stop_safeplace(quote, multiplier = 4):
     ret = []
     for i in range(len(price)):
         ret.append(price[i] if stop[i] == 0.0 else price[i] - (stop[i] * multiplier))
-    testRet = { 'low': low, 'lowSum': lowSum, 'count': count, 'countSum': countSum, 'stop': ret }
-    return testRet
+    #testRet = { 'low': low, 'lowSum': lowSum, 'count': count, 'countSum': countSum, 'stop': ret }
+    return ret
+
+
+def get_stop_candelabro(quote, multiplier = 4):
+    minPrice = quote['minPrice']
+    maxPrice = quote['maxPrice']
+    closePrice = quote['closePrice']
+    highLow = [ maxPrice[0] - minPrice[0] ]
+    highClose = [ 0.0 ]
+    lowClose = [ 0.0 ]
+    tr = [ highLow[0] ]
+
+    for i in range(1, len(minPrice)):
+        highLow.append(maxPrice[i] - minPrice[i])
+        highClose.append(abs(maxPrice[i] - closePrice[i-1]))
+        lowClose.append(abs(minPrice[i] - closePrice[i-1]))
+        tr.append(max(highLow[i], highClose[i], lowClose[i]))
+
+    atr = []
+    atrSumDays = 14
+    ret = []
+    for i in range(len(minPrice)):
+        l = tr[ max(i - atrSumDays + 1, 0) : i + 1 ]
+        atr.append( sum(l) / len(l) if len(l) < atrSumDays else (atr[i-1] * (atrSumDays-1) + tr[i]) / atrSumDays )
+        l = maxPrice[ max(i - atrSumDays + 1, 0) : i + 1 ]
+        ret.append(max(l) - (atr[i] * multiplier))
+    #testRet = { 'highLow': highLow, 'highClose': highClose, 'lowClose': lowClose, 'tr': tr, 'atr': atr, 'stop': ret }
+    return ret

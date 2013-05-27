@@ -326,13 +326,27 @@ def get_sma(price, days):
         ret.append( sum(l) / len(l) )
     return ret
 
-def get_ema(quote, days):
-    sma = 'sma-' + str(days)
-    ema = 'ema-' + str(days)
-    ret = { sma: get_sma(quote['closePrice'], days), ema: [] }
+
+def get_ema(price, days):
+    sma = get_sma(price[0:days], days)
+    ret = []
     for i in range(days):
-        ret[ema].append(ret[sma][i])
+        ret.append(sma[i])
     multiplier = ( 2.0 / (float(days) + 1.0) )
-    for i in range(days, len(ret[sma])):
-        ret[ema].append( (quote['closePrice'][i] - ret[ema][i-1]) * multiplier + ret[ema][i-1] )
+    for i in range(days, len(price)):
+        ret.append( (price[i] - ret[i-1]) * multiplier + ret[i-1] )
+    return ret
+
+
+def get_macd(price, shortDays = 12, longDays = 26, signalDays = 9):
+    shortMacd = get_ema(price, shortDays)
+    longMacd = get_ema(price, longDays)
+    macd = []
+    for i in range(len(price)):
+        macd.append(shortMacd[i] - longMacd[i])
+    signal = get_ema(macd, signalDays)
+    hist = []
+    for i in range(len(price)):
+        hist.append(macd[i] - signal[i])
+    ret = { 'macd': macd, 'signal': signal, 'hist': hist }
     return ret

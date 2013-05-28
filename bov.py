@@ -330,7 +330,7 @@ def get_sma(quote, days = 10):
 
 def get_ema(quote, days = 10):
     price = quote['closePrice']
-    sma = get_sma(price[0:days], days)
+    sma = get_sma(quote, days)
     ret = []
     for i in range(days):
         ret.append(sma[i])
@@ -405,4 +405,15 @@ def get_stop_candelabro(quote, multiplier = 4):
         l = maxPrice[ max(i - atrSumDays + 1, 0) : i + 1 ]
         ret.append(max(l) - (atr[i] * multiplier))
     #testRet = { 'highLow': highLow, 'highClose': highClose, 'lowClose': lowClose, 'tr': tr, 'atr': atr, 'stop': ret }
+    return ret
+
+
+def get_plan(code):
+    quote = load_data(code, 'week')
+    ema12 = get_ema(quote, 12)
+    ema6 = get_ema(quote, 6)
+    plan = []
+    for i in range(len(ema12)):
+        plan.append('buy' if ema6[i] < ema12[i] else 'sell')
+    ret = { 'date': quote['date'], 'ema-12': ema12, 'ema-6': ema6, 'plan': plan }
     return ret

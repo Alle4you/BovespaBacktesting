@@ -408,12 +408,37 @@ def get_stop_candelabro(quote, multiplier = 4):
     return ret
 
 
-def get_plan(code):
+def get_trend(code):
     quote = load_data(code, 'week')
     ema12 = get_ema(quote, 12)
     ema6 = get_ema(quote, 6)
-    plan = []
-    for i in range(len(ema12)):
-        plan.append('buy' if ema6[i] < ema12[i] else 'sell')
-    ret = { 'date': quote['date'], 'ema-12': ema12, 'ema-6': ema6, 'plan': plan }
+    trend = []
+    for i in range(12): # ignorando primeiros dias
+        trend.append('')
+    for i in range(12, len(ema12)):
+        diff = ema6[i] - ema12[i]
+        if abs(diff) / ((ema6[i] + ema12[i]) / 2.0) < 0.01: # diferenca menor que 1%
+            trend.append('')
+        else:
+            trend.append('buy' if ema6[i] > ema12[i] else 'sell')
+    ret = { 'date': quote['date'], 'ema-12': ema12, 'ema-6': ema6, 'trend': trend }
     return ret
+
+
+def get_signal(code):
+    quote = load_quote(code)
+    ema24 = get_ema(quote, 24)
+    ema12 = get_ema(quote, 12)
+    stop = get_stop_safeplace(quote)
+    signal = []
+    for i in range(24): # ignorando primeiros dias
+        signal.append('')
+    for i in range(24, len(ema24)):
+        diff = ema12[i] - ema24[i]
+        diffOk = abs(diff) / ((ema12[i] + ema24[i]) / 2.0) > 0.01 # diferenca maior que 1%
+        emaOk = True if ema12[i] > ema24[i] else False
+        stopOk = True if stop[i] < quote['minPrice'][i] else False
+        signal.append('buy' if diffOk and emaOk and stopOk else '')
+    ret = { 'date': quote['date'], 'ema-24': ema24, 'ema-12': ema12, 'signal': signal, 'stop': stop, 'min': quote['minPrice'] }
+    return ret
+

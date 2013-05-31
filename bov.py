@@ -442,3 +442,59 @@ def get_signal(code):
     ret = { 'date': quote['date'], 'ema-24': ema24, 'ema-12': ema12, 'signal': signal, 'stop': stop, 'min': quote['minPrice'] }
     return ret
 
+
+def get_backtesting(code):
+    quote = load_quote(code)
+    trend = get_trend(code)
+    signal = get_signal(code)
+
+    begin = []
+    buy = []
+    stop = []
+    sell = []
+    end = []
+    result = []
+    isLong = False
+
+    for week in range(24, len(trend['trend'])):
+
+        if trend['trend'][week] == 'buy': # semana de compras
+            signalIdx = signal['date'].index(trend['date'][week]) # inicio da semana em dias
+            lastDay = trend['date'][week+1] if week+1 < len(trend['date']) else datetime.date.today() # ultimo dia do trend atual
+
+            while signalIdx < len(signal['signal']) and signal['date'][signalIdx] < lastDay: # enquanto houver dias e estivermos no trend atual
+
+                if isLong: # estamos comprados
+                    if quote['minPrice'][signalIdx] <= stop[-1]: # estourou o stop
+                        sell[-1] = stop[-1]
+                        end[-1] = signal['date'][signalIdx]
+                        result[-1] = sell[-1] - buy[-1]
+                        isLong = False
+                    elif signal['signal'][signalIdx] != 'buy': # hora de vender
+                        sell[-1] = quote['minPrice'][signalIdx] # usando pior preco para compensar slipage
+                        end[-1] = signal['date'][signalIdx]
+                        result[-1] = sell[-1] - buy[-1]
+                        isLong = False
+                    else: # apenas atualiza dados
+                        sell[-1] = quote['minPrice'][signalIdx] # usando pior preco para compensar slipage
+                        end[-1] = signal['date'][signalIdx]
+                        result[-1] = sell[-1] - buy[-1]
+                        stopSpread = quote['minPrice'][signalIdx] - stop[-1]
+                        buySpread = buy[-1] - stop[-1]
+                        if stopSpread > buySpread * 2: # se der pra subir o stop
+                            stop[-1] = signal['stop'][signalIdx]
+
+                elif signal['signal'][signalIdx] == 'buy': # hora de comprar
+                    begin.append(signal['date'][signalIdx])
+                    buy.append(quote['maxPrice'][signalIdx]) # usando pior preco para compensar slipage
+                    sell.append(quote['minPrice'][signalIdx]) # usando pior preco para compensar slipage
+                    stop.append(signal['stop'][signalIdx])
+                    end.append(signal['date'][signalIdx])
+                    result.append(sell[-1] - buy[-1])
+                    isLong = True
+
+                signalIdx = signalIdx + 1
+
+    ret = { 'begin': begin ,'buy': buy ,'stop': stop ,'sell': sell ,'end': end ,'result': result }
+    return ret
+

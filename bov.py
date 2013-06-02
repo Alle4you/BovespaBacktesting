@@ -648,11 +648,11 @@ def import_from_fin_doc(path):
     zip = zipfile.ZipFile(path, 'r')
     company = get_company_name(zip)
     finDate = get_fin_date(zip)
-    fdate = datetime.date(int(finDate[0:4]), int(finDate[5:7]), int(finDate[8:10]))
-    
-    print company, fdate
 
     if company and finDate:
+        print path, company, finDate
+        fdate = datetime.date(int(finDate[0:4]), int(finDate[5:7]), int(finDate[8:10]))
+
         companies = load_companyToCode()
         codes = set(get_quote_codes())
         finAccounts = get_fin_accounts();
@@ -684,4 +684,53 @@ def import_from_fin_doc(path):
                         fin = load_data(cod, 'fin')
                         if fin == None: fin = { }
                         fin[fdate] = finData
+                        write_data(cod, 'fin', fin)
+
+
+def import_from_fin_doc_only_complement(path):
+    import xml.etree.ElementTree as ET
+
+    zip = zipfile.ZipFile(path, 'r')
+    company = get_company_name(zip)
+    finDate = get_fin_date(zip)
+
+    if company and finDate:
+        print path, company, finDate
+        fdate = datetime.date(int(finDate[0:4]), int(finDate[5:7]), int(finDate[8:10]))
+
+        companies = load_companyToCode()
+        codes = set(get_quote_codes())
+        finAccounts = get_fin_accounts();
+
+        if company in companies:
+            companyCodes = list(set(companies[company]) & codes)
+            if len(companyCodes):
+                zip = load_inner_fin_zip(zip)
+                shareCount = 0.0
+                profitPerShare = 0.0
+
+                if zip and 'ComposicaoCapitalSocialDemonstracaoFinanceiraNegocios.xml' in zip.namelist():
+                    xmlFile = zip.read('ComposicaoCapitalSocialDemonstracaoFinanceiraNegocios.xml')
+                    root = ET.fromstring(xmlFile)
+                    shareTag = root.find('ComposicaoCapitalSocialDemonstracaoFinanceira')
+                    if shareTag != None:
+                        shareCountTag = shareTag.find('QuantidadeTotalAcaoCapitalIntegralizado')
+                        if shareCountTag != None:
+                            shareCount = float(shareCountTag.text)
+
+                if zip and 'PagamentoProventoDinheiroDemonstracaoFinanceiraNegocios.xml' in zip.namelist():
+                    xmlFile = zip.read('PagamentoProventoDinheiroDemonstracaoFinanceiraNegocios.xml')
+                    root = ET.fromstring(xmlFile)
+                    profitTag = root.find('PagamentoProventoDinheiroDemonstracaoFinanceira')
+                    if profitTag != None:
+                        profitCountTag = profitTag.find('ValorProventoPorAcao')
+                        if profitCountTag != None:
+                            profitPerShare = float(profitCountTag.text)
+
+                for cod in companyCodes:
+                    fin = load_data(cod, 'fin')
+                    if fin != None and fdate in fin:
+                        finData = fin[fdate]
+                        finData['shareCount'] = shareCount
+                        finData['profitPerShare'] = profitPerShare
                         write_data(cod, 'fin', fin)

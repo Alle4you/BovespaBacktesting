@@ -10,6 +10,7 @@ import pickle
 DATA_PATH = 'data'
 QUOTE_FILE_NAME = 'quote'
 QUOTE_WEEK_FILE_NAME = 'week'
+FIN_ITR_DATES = [ '03-31', '06-30', '09-30' ]
 
 
 def geturl(cvmcode, pubdata):
@@ -178,6 +179,46 @@ def catalog_findoc_zip(zip, fileNameTip = ''):
     return fileNameTip
 
 
+def get_company_name(zip):
+    import xml.etree.ElementTree as ET
+    ret = None
+
+    try:
+        xmlName = None
+        for name in [ 'FormularioDemonstracaoFinanceiraDFP.xml', 'FormularioDemonstracaoFinanceiraITR.xml' ]:
+            if name in zip.namelist():
+                xmlName = name
+                break
+        if xmlName != None:
+            xmlFile = zip.read(xmlName)
+            dfp = ET.fromstring(xmlFile)
+            ret = dfp.find('CompanhiaAberta').find('NomeRazaoSocialCompanhiaAberta').text.strip()
+    except Exception as e:
+        print 'Erro analisando arquivo: ' + str(e)
+
+    return ret
+
+
+def get_fin_date(zip):
+    import xml.etree.ElementTree as ET
+    ret = None
+
+    try:
+        xmlName = None
+        for name in [ 'FormularioDemonstracaoFinanceiraDFP.xml', 'FormularioDemonstracaoFinanceiraITR.xml' ]:
+            if name in zip.namelist():
+                xmlName = name
+                break
+        if xmlName != None:
+            xmlFile = zip.read(xmlName)
+            dfp = ET.fromstring(xmlFile)
+            ret = dfp.find('DataReferenciaDocumento').text[0:10]
+    except Exception as e:
+        print 'Erro analisando arquivo: ' + str(e)
+
+    return ret
+
+
 
 def catalog_findoc_url(url, docNumber):
     import xml.etree.ElementTree as ET
@@ -261,11 +302,13 @@ def load_companyToCode():
 
 def load_data(code, dataName):
     from os.path import isfile, join
+    ret = None
     code = code.lower()
     codePath = join(join(DATA_PATH, code), dataName)
-    f = open(codePath, 'r')
-    ret = pickle.load(f)
-    f.close()
+    if os.path.exists(codePath):
+        f = open(codePath, 'r')
+        ret = pickle.load(f)
+        f.close()
     return ret
 
 
@@ -281,6 +324,10 @@ def get_quote_codes():
     from os.path import isdir, join
     ret = [ f for f in os.listdir(DATA_PATH) if isdir(join(DATA_PATH, f)) ]
     return ret
+
+
+def get_fin_accounts():
+    return [item[:-1] for item in list(open(r'data\filterAccounts', 'r'))]
 
 
 def write_data(code, dataName, data):
@@ -587,3 +634,54 @@ def get_backtesting_all():
                 ret[item] = ret[item] + backtesting[item]
 
     return ret
+
+
+def load_inner_fin_zip(zip):
+    for name in zip.namelist():
+        if name[-3:] == 'itr' or name[-3:] == 'dfp':
+            return zipfile.ZipFile(StringIO.StringIO(zip.read(name)))
+
+
+def import_from_fin_doc(path):
+    import xml.etree.ElementTree as ET
+
+    zip = zipfile.ZipFile(path, 'r')
+    company = get_company_name(zip)
+    finDate = get_fin_date(zip)
+    fdate = datetime.date(int(finDate[0:4]), int(finDate[5:7]), int(finDate[8:10]))
+    
+    print company, fdate
+
+    if company and finDate:
+        companies = load_companyToCode()
+        codes = set(get_quote_codes())
+        finAccounts = get_fin_accounts();
+
+        if company in companies:
+            companyCodes = list(set(companies[company]) & codes)
+            if len(companyCodes):
+                zip = load_inner_fin_zip(zip)
+                if zip and 'InfoFinaDFin.xml' in zip.namelist():
+                    xmlFile = zip.read('InfoFinaDFin.xml')
+                    dfp = ET.fromstring(xmlFile)
+                    finLista = dfp.findall('InfoFinaDFin')    
+                    finData = { }
+
+                    for finInfo in dfp.iter('InfoFinaDFin'):
+                        finCode = finInfo.find('PlanoConta').find('VersaoPlanoConta').find('CodigoTipoInformacaoFinanceira')
+                        if finCode.text == '2': # informacoes consolidadas
+                            accountCode = finInfo.find('PlanoConta').find('NumeroConta')
+                            if accountCode.text in finAccounts:
+                                accountValues = []
+                                for i in range(1, 13):
+                                    accountNumber = 'ValorConta' + str(i)
+                                    accountValue = float(finInfo.find(accountNumber).text)
+                                    if accountValue != 0.0:
+                                        accountValues.append(accountValue)
+                                finData[accountCode.text] = accountValues
+
+                    for cod in companyCodes:
+                        fin = load_data(cod, 'fin')
+                        if fin == None: fin = { }
+                        fin[fdate] = finData
+                        write_data(cod, 'fin', fin)

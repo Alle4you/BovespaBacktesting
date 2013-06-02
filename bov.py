@@ -13,6 +13,9 @@ QUOTE_WEEK_FILE_NAME = 'week'
 FIN_ITR_DATES = [ '03-31', '06-30', '09-30' ]
 
 
+def isitr(dt):
+    return True if dt.month in [3, 6, 9] else False
+
 def geturl(cvmcode, pubdata):
     return 'http://www.bmfbovespa.com.br/dxw/Download.asp?moeda=L&site=B&mercado=18&ccvm=' + str(cvmcode) + '&data=' + pubdata + '&tipo=2'
 
@@ -468,7 +471,15 @@ def get_stop_candelabro(quote, multiplier = 4):
     return ret
 
 
+def isSelected(select, dt):
+    ret = False
+    for k, v in sorted(select.iteritems()):
+        if k < dt: ret = v
+    return ret
+
+
 def get_trend(code):
+    select = select_company(code)
     quote = load_data(code, 'week')
     ema12 = get_ema(quote, 12)
     ema6 = get_ema(quote, 6)
@@ -476,11 +487,14 @@ def get_trend(code):
     for i in range(12): # ignorando primeiros dias
         trend.append('')
     for i in range(12, len(ema12)):
-        diff = ema6[i] - ema12[i]
-        if abs(diff) / ((ema6[i] + ema12[i]) / 2.0) < 0.01: # diferenca menor que 1%
-            trend.append('')
+        if isSelected(select, quote['date'][i]):
+            diff = ema6[i] - ema12[i]
+            if abs(diff) / ((ema6[i] + ema12[i]) / 2.0) < 0.01: # diferenca menor que 1%
+                trend.append('')
+            else:
+                trend.append('buy' if ema6[i] > ema12[i] else 'sell')
         else:
-            trend.append('buy' if ema6[i] > ema12[i] else 'sell')
+            trend.append('')
     ret = { 'date': quote['date'], 'ema-12': ema12, 'ema-6': ema6, 'trend': trend }
     return ret
 
@@ -633,6 +647,25 @@ def get_backtesting_all():
             for item in backtesting.keys():
                 ret[item] = ret[item] + backtesting[item]
 
+    return ret
+
+
+def select_company(code):
+    fin = load_data(code, 'fin')
+    ret = { }
+    if fin != None:
+        for dt, dfp in fin.iteritems():
+            profit = []
+            if '3.11' in dfp and len(dfp['3.11']) == 4:
+                profit.append(dfp['3.11'][0])
+                profit.append(dfp['3.11'][2])
+            elif '3.11' in dfp and len(dfp['3.11']) == 3:
+                profit.append(dfp['3.11'][0])
+                profit.append(dfp['3.11'][1])
+            elif '3.11' in dfp and len(dfp['3.11']) == 2:
+                profit.append(dfp['3.11'][0])
+                profit.append(dfp['3.11'][1])
+            ret[dt] = True if len(profit) == 2 and profit[0] > profit[1] else False
     return ret
 
 

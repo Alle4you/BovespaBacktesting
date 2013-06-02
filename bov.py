@@ -246,6 +246,19 @@ def import_from_jgrafix(jgrafixDocsPath):
             write_data(doc, QUOTE_WEEK_FILE_NAME, weekDict)
 
 
+def load_companyToCode():
+    codes = [item[:-1] for item in list(open(r'data\companyToCode', 'r'))]
+    ret = {}
+    for cod in codes:
+        company = cod[0:13].strip()
+        code = cod[13:].strip()
+        if company in ret:
+            ret[company].append(code)
+        else:
+            ret[company] = [ code ]
+    return ret
+
+
 def load_data(code, dataName):
     from os.path import isfile, join
     code = code.lower()

@@ -487,14 +487,14 @@ def get_trend(code):
     for i in range(12): # ignorando primeiros dias
         trend.append('')
     for i in range(12, len(ema12)):
-        if isSelected(select, quote['date'][i]):
+        #if isSelected(select, quote['date'][i]):
             diff = ema6[i] - ema12[i]
             if abs(diff) / ((ema6[i] + ema12[i]) / 2.0) < 0.01: # diferenca menor que 1%
                 trend.append('')
             else:
                 trend.append('buy' if ema6[i] > ema12[i] else 'sell')
-        else:
-            trend.append('')
+        #else:
+        #    trend.append('')
     ret = { 'date': quote['date'], 'ema-12': ema12, 'ema-6': ema6, 'trend': trend }
     return ret
 
@@ -648,6 +648,49 @@ def get_backtesting_all():
                 ret[item] = ret[item] + backtesting[item]
 
     return ret
+
+
+def get_backtesting_signal_fixed_stop(code):
+    quote = load_quote(code)
+    trend = get_trend(code)
+    signal = get_signal(code)
+    date = []
+    retsignal = []
+
+    for week in range(24, len(trend['trend'])):
+
+        if trend['trend'][week] == 'buy': # semana de compras
+            signalIdx = signal['date'].index(trend['date'][week]) # inicio da semana em dias
+            lastDay = trend['date'][week+1] if week+1 < len(trend['date']) else datetime.date.today() # ultimo dia do trend atual
+
+            while signalIdx < len(signal['signal']) and signal['date'][signalIdx] < lastDay: # enquanto houver dias e estivermos no trend atual
+
+                date.append(signal['date'][signalIdx])
+                if signal['signal'][signalIdx] == 'buy': # hora de comprar
+                    retsignal.append('buy')
+                else:
+                    retsignal.append('')
+
+                signalIdx = signalIdx + 1
+
+    ret = { 'date': date, 'signal': retsignal }
+    return ret
+
+def backtesting_select_current():
+    codes = get_quote_codes()
+    date = []
+    retsignal = []
+    retcode = []
+    for code in codes:
+        backtesting = get_backtesting_signal_fixed_stop(code)
+        if len(backtesting['signal']) and backtesting['signal'][-1] == 'buy':
+            date.append(backtesting['date'][-1])
+            retsignal.append(backtesting['signal'][-1])
+            retcode.append(code)
+
+    ret = { 'date': date, 'code': retcode, 'signal': retsignal }
+    return ret
+
 
 
 def select_company(code):

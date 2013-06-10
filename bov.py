@@ -837,3 +837,9 @@ def import_from_fin_doc_only_complement(path):
                         finData['shareCount'] = shareCount
                         finData['profitPerShare'] = profitPerShare
                         write_data(cod, 'fin', fin)
+
+
+def backtesting():
+    import_from_jgrafix(r'C:\Tools\JGrafix\dados')
+    bt = get_backtesting_all()
+    export_to_csv(bt, 'BackTesting.csv')

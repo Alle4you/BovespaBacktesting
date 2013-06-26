@@ -660,12 +660,12 @@ def get_backtesting_moveable_stop(code):
 
 def get_backtesting_all():
     codes = get_quote_codes()
-    tests = [ get_backtesting_fixed_stop, get_backtesting_moveable_stop ]
+    tests = [ get_backtesting_fixed_stop ]
     ret = { 'begin': [] ,'buy': [] ,'stop': [] ,'sell': [] ,'end': [] ,'result': [], 'code': [], 'backtesting': [] }
 
     for test in tests:
         print test.__name__
-        for code in codes:
+        for code in codes[0:10]:
             print '>' + code
             backtesting = test(code)
             backtestingCount = len(backtesting['begin'])
@@ -839,7 +839,65 @@ def import_from_fin_doc_only_complement(path):
                         write_data(cod, 'fin', fin)
 
 
+class Backtesting:
+    def __init__(self, begin, end, buy, sell, result, code, backtesting, stop):
+        self.begin = begin
+        self.end = end
+        self.buy = buy
+        self.sell = sell
+        self.result = result
+        self.code = code
+        self.backtesting = backtesting
+        self.stop = stop
+        self.money = 0.0
+    def __repr__(self):
+        return repr((self.begin, self.end, self.buy, self.sell, self.result, self.code, self.backtesting, self.stop))
+
+
+def convertBacktesting(bt):
+    ret = []
+    for i in range(len(bt['begin'])):
+        ret.append(Backtesting(bt['begin'][i], bt['end'][i], bt['buy'][i], bt['sell'][i], bt['result'][i], bt['code'][i], bt['backtesting'][i], bt['stop'][i]))
+    ret = sorted(ret, key=lambda k: k.begin)
+    return ret
+
+
+def convertBacktesting2(bt):
+    begin = []
+    end = []
+    buy = []
+    sell = []
+    result = []
+    code = []
+    backtesting = []
+    stop = []
+    money = []
+    for b in bt:
+        begin.append(b.begin)
+        end.append(b.end)
+        buy.append(b.buy)
+        sell.append(b.sell)
+        result.append(b.result)
+        code.append(b.code)
+        backtesting.append(b.backtesting)
+        stop.append(b.stop)
+        money.append(b.money)
+    ret = { 'begin': begin, 'end': end, 'buy': buy, 'sell': sell, 'result': result, 'code': code, 'backtesting': backtesting, 'stop': stop, 'money': money }
+    return ret
+
+
+def moneytest(bt):
+    money = 100000.0
+    backtesting = convertBacktesting(bt)
+    for b in backtesting:
+        money = money - 1.0
+        b.money = money
+    ret = convertBacktesting2(backtesting)
+    return ret
+
+
 def backtesting():
-    import_from_jgrafix(r'C:\Tools\JGrafix\dados')
+    #import_from_jgrafix(r'C:\Tools\JGrafix\dados')
     bt = get_backtesting_all()
+    bt = moneytest(bt)
     export_to_csv(bt, 'BackTesting.csv')

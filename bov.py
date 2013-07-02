@@ -665,7 +665,7 @@ def get_backtesting_all():
 
     for test in tests:
         print test.__name__
-        for code in codes[0:10]:
+        for code in codes:
             print '>' + code
             backtesting = test(code)
             backtestingCount = len(backtesting['begin'])
@@ -850,8 +850,12 @@ class Backtesting:
         self.backtesting = backtesting
         self.stop = stop
         self.money = 0.0
+        self.trade = 0
+        self.trades = ''
+        self.qtd = 0
     def __repr__(self):
-        return repr((self.begin, self.end, self.buy, self.sell, self.result, self.code, self.backtesting, self.stop))
+        return repr((self.begin, self.end, self.buy, self.sell, self.result, self.code, self.backtesting, 
+        self.stop, self.trade, self.trades, self.qtd))
 
 
 def convertBacktesting(bt):
@@ -872,6 +876,9 @@ def convertBacktesting2(bt):
     backtesting = []
     stop = []
     money = []
+    trade = []
+    trades = []
+    qtd = []
     for b in bt:
         begin.append(b.begin)
         end.append(b.end)
@@ -882,16 +889,57 @@ def convertBacktesting2(bt):
         backtesting.append(b.backtesting)
         stop.append(b.stop)
         money.append(b.money)
-    ret = { 'begin': begin, 'end': end, 'buy': buy, 'sell': sell, 'result': result, 'code': code, 'backtesting': backtesting, 'stop': stop, 'money': money }
+        trade.append(b.trade)
+        trades.append(b.trades)
+        qtd.append(b.qtd)
+    ret = { 'begin': begin, 'end': end, 'buy': buy, 'sell': sell, 'result': result, 
+    'code': code, 'backtesting': backtesting, 'stop': stop, 'money': money, 
+    'trade': trade, 'trades': trades
+    ,'qtd': qtd
+    }
     return ret
 
 
+def calcTrade(maxLoss, b):
+    lossPerUnit = b.buy - b.stop
+    b.qtd = maxLoss / lossPerUnit
+
+
+def calcTotalTrades(money, b1, bs):
+    b1.trades = ''
+    b1.money = money
+    for b2 in bs:
+        if b2.begin <= b1.begin and b2.end >= b1.begin: # trades que comecaram antes
+            b1.trades = b1.trades + ' ' + str(b2.trade)
+            b2Price = b2.buy * b2.qtd
+            newMoney = b1.money - b2Price
+            if newMoney > 0.0:
+                b1.money = newMoney
+            else:
+                b2.qtd = 0
+        elif b2.end <= b1.end and b2.end >= b1.begin: # trades que comecaram depois
+            pass
+            #b1.trades = b1.trades + 1
+        elif b2.begin >= b1.begin and b2.end <= b1.end: # trades que comecaram depois e terminaram antes
+            pass
+            #b1.trades = b1.trades + 1
+
+
 def moneytest(bt):
-    money = 100000.0
     backtesting = convertBacktesting(bt)
-    for b in backtesting:
-        money = money - 1.0
-        b.money = money
+
+    for i in range(len(backtesting)): # para cada posicao com data de entrada e saida distintas
+        backtesting[i].trade = i + 1
+
+    money = 100000.0
+    maxLoss = money * 0.01 # maximo de perda de 2% sobre o total
+    begin = backtesting[0].begin
+    end = backtesting[-1].end
+    for i in range(len(backtesting)): # primeiro calcula o risco isolado de cada operacao
+        calcTrade(maxLoss, backtesting[i])
+    for i in range(len(backtesting)): # depois reajusta baseado em trades simultaneos
+        calcTotalTrades(money, backtesting[i], backtesting)
+
     ret = convertBacktesting2(backtesting)
     return ret
 

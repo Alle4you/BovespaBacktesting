@@ -900,16 +900,27 @@ def convertBacktesting2(bt):
     return ret
 
 
+def calctaxes(invest):
+    ret = 17 + (invest * 0.00325) # corretagem + emolumentos bovespa
+    return ret
+
+
 def calcTrade(maxLoss, b):
     lossPerUnit = b.buy - b.stop
-    b.qtd = maxLoss / lossPerUnit
+    b.qtd = int((maxLoss / lossPerUnit) / 100) * 100
 
 
 def calcTotalTrades(money, b1, bs):
     b1.trades = ''
     b1.money = money
     for b2 in bs:
-        if b2.begin <= b1.begin and b2.end >= b1.begin: # trades que comecaram antes
+        if b2.end <= b1.begin: # trades que terminaram antes
+            b2Money = b2.qtd * b2.result - calctaxes(b2.qtd * b2.buy) - calctaxes(b2.qtd * b2.sell)
+            if b2Money > 0.0:
+                b2Money = b2Money * 0.80 # tirando imposto de renda por antecipacao
+            money = money + b2Money
+            b1.money = money
+        elif b2.begin <= b1.begin and b2.end >= b1.begin: # trades que comecaram antes ou ao mesmo tempo
             b1.trades = b1.trades + ' ' + str(b2.trade)
             b2Price = b2.buy * b2.qtd
             newMoney = b1.money - b2Price
@@ -919,10 +930,8 @@ def calcTotalTrades(money, b1, bs):
                 b2.qtd = 0
         elif b2.end <= b1.end and b2.end >= b1.begin: # trades que comecaram depois
             pass
-            #b1.trades = b1.trades + 1
         elif b2.begin >= b1.begin and b2.end <= b1.end: # trades que comecaram depois e terminaram antes
             pass
-            #b1.trades = b1.trades + 1
 
 
 def moneytest(bt):
@@ -932,7 +941,7 @@ def moneytest(bt):
         backtesting[i].trade = i + 1
 
     money = 100000.0
-    maxLoss = money * 0.01 # maximo de perda de 2% sobre o total
+    maxLoss = money * 0.01 # maximo de perda sobre o patrimonio total
     begin = backtesting[0].begin
     end = backtesting[-1].end
     for i in range(len(backtesting)): # primeiro calcula o risco isolado de cada operacao

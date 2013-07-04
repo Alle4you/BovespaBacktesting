@@ -850,12 +850,12 @@ class Backtesting:
         self.backtesting = backtesting
         self.stop = stop
         self.money = 0.0
+        self.liquid = 0.0
         self.trade = 0
         self.trades = ''
         self.qtd = 0
     def __repr__(self):
-        return repr((self.begin, self.end, self.buy, self.sell, self.result, self.code, self.backtesting, 
-        self.stop, self.trade, self.trades, self.qtd))
+        return repr((self.begin, self.end, self.buy, self.sell, self.result, self.code, self.backtesting, self.stop))
 
 
 def convertBacktesting(bt):
@@ -876,6 +876,7 @@ def convertBacktesting2(bt):
     backtesting = []
     stop = []
     money = []
+    liquid = []
     trade = []
     trades = []
     qtd = []
@@ -889,6 +890,7 @@ def convertBacktesting2(bt):
         backtesting.append(b.backtesting)
         stop.append(b.stop)
         money.append(b.money)
+        liquid.append(b.liquid)
         trade.append(b.trade)
         trades.append(b.trades)
         qtd.append(b.qtd)
@@ -896,6 +898,7 @@ def convertBacktesting2(bt):
     'code': code, 'backtesting': backtesting, 'stop': stop, 'money': money, 
     'trade': trade, 'trades': trades
     ,'qtd': qtd
+    ,'liquid': liquid
     }
     return ret
 
@@ -913,6 +916,7 @@ def calcTrade(maxLoss, b):
 def calcTotalTrades(money, b1, bs):
     b1.trades = ''
     b1.money = money
+    b1.liquid = money
     for b2 in bs:
         if b2.end <= b1.begin: # trades que terminaram antes
             b2Money = b2.qtd * b2.result - calctaxes(b2.qtd * b2.buy) - calctaxes(b2.qtd * b2.sell)
@@ -920,13 +924,12 @@ def calcTotalTrades(money, b1, bs):
                 b2Money = b2Money * 0.80 # tirando imposto de renda por antecipacao
             money = money + b2Money
             b1.money = money
+            b1.liquid = money
         elif b2.begin <= b1.begin and b2.end >= b1.begin: # trades que comecaram antes ou ao mesmo tempo
             b1.trades = b1.trades + ' ' + str(b2.trade)
             b2Price = b2.buy * b2.qtd
-            newMoney = b1.money - b2Price
-            if newMoney > 0.0:
-                b1.money = newMoney
-            else:
+            b1.liquid = b1.liquid - b2Price
+            if b1.liquid <= 0.0:
                 b2.qtd = 0
         elif b2.end <= b1.end and b2.end >= b1.begin: # trades que comecaram depois
             pass

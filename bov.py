@@ -720,7 +720,8 @@ def backtesting_select_current():
 
 
 
-def select_company(code):
+# selecao fundamentalista em revisao
+def select_company_old(code):
     fin = load_data(code, 'fin')
     ret = { }
     if fin != None:
@@ -736,6 +737,30 @@ def select_company(code):
                 profit.append(dfp['3.11'][0])
                 profit.append(dfp['3.11'][1])
             ret[dt] = True if len(profit) == 2 and profit[0] > profit[1] else False
+    return ret
+
+
+def select_company(code):
+    quote = load_quote(code)
+    ret = { }
+    volume = 0.0
+    volumeTot = 0.0
+    days = 0
+    for i in range(len(quote['date'])):
+        qv = quote['volume'][i]
+        qd = quote['date'][i]
+        if days == 0:
+            days = days + 1
+            volumeTot = qv
+            volume = volumeTot
+        else:
+            if days < 60:
+                days = days + 1
+            else:
+                volumeTot = volumeTot - volume
+        volumeTot = volumeTot + qv
+        volume = volumeTot / days
+        ret[qd] = volume > 1000000
     return ret
 
 

@@ -514,14 +514,14 @@ def get_trend(code):
     for i in range(12): # ignorando primeiros dias
         trend.append('')
     for i in range(12, len(ema12)):
-        #if isSelected(select, quote['date'][i]):
+        if isSelected(select, quote['date'][i]):
             diff = ema6[i] - ema12[i]
             if abs(diff) / ((ema6[i] + ema12[i]) / 2.0) < 0.01: # diferenca menor que 1%
                 trend.append('')
             else:
                 trend.append('buy' if ema6[i] > ema12[i] else 'sell')
-        #else:
-        #    trend.append('')
+        else:
+            trend.append('')
     ret = { 'date': quote['date'], 'ema-12': ema12, 'ema-6': ema6, 'trend': trend }
     return ret
 
@@ -760,7 +760,7 @@ def select_company(code):
                 volumeTot = volumeTot - volume
         volumeTot = volumeTot + qv
         volume = volumeTot / days
-        ret[qd] = volume > 1000000
+        ret[qd] = volume > 100000
     return ret
 
 
@@ -877,7 +877,7 @@ class Backtesting:
         self.money = 0.0
         self.liquid = 0.0
         self.trade = 0
-        self.trades = ''
+        self.trades = 0
         self.qtd = 0
     def __repr__(self):
         return repr((self.begin, self.end, self.buy, self.sell, self.result, self.code, self.backtesting, self.stop))
@@ -939,11 +939,21 @@ def calcTrade(maxLoss, b):
 
 
 def calcTotalTrades(money, b1, bs):
-    b1.trades = ''
+    b1.trades = 1
     b1.money = money
     b1.liquid = money
     for b2 in bs:
-        if b2.end <= b1.begin: # trades que terminaram antes
+        if b1.money <= 0.0: # acabou o dinheiro: estamos falidos
+            break
+        elif b2.trade == b1.trade: # somos nos mesmos
+            b1Price = b1.buy * b1.qtd
+            b1Liquid = b1.liquid - b1Price
+            if b1Liquid >= 0.0:
+                b1.liquid = b1Liquid
+            else:
+                b1.qtd = 0
+            break
+        elif b2.end <= b1.begin: # trades que terminaram antes
             b2Money = b2.qtd * b2.result - calctaxes(b2.qtd * b2.buy) - calctaxes(b2.qtd * b2.sell)
             if b2Money > 0.0:
                 b2Money = b2Money * 0.80 # tirando imposto de renda por antecipacao
@@ -951,11 +961,9 @@ def calcTotalTrades(money, b1, bs):
             b1.money = money
             b1.liquid = money
         elif b2.begin <= b1.begin and b2.end >= b1.begin: # trades que comecaram antes ou ao mesmo tempo
-            b1.trades = b1.trades + ' ' + str(b2.trade)
+            b1.trades = b1.trades + 1
             b2Price = b2.buy * b2.qtd
             b1.liquid = b1.liquid - b2Price
-            if b1.liquid <= 0.0:
-                b2.qtd = 0
         elif b2.end <= b1.end and b2.end >= b1.begin: # trades que comecaram depois
             pass
         elif b2.begin >= b1.begin and b2.end <= b1.end: # trades que comecaram depois e terminaram antes

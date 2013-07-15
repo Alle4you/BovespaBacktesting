@@ -1,3 +1,3 @@
-O projeto é um conjunto de scripts em Python que tem por fim baixar aqueles ZIPs disfarçados do saite da Bovespa (http://www.bmfbovespa.com.br/) e manipular os dados disponíveis, como balanços.
+O projeto começou como um script em Python para baixar os ZIPs da Bovespa e manipular os dados disponíveis, balanços e demonstrativos em geral. Com isso seria feita a mineração de dados com o objetivo final de tornar simples o batimento e consolidação de informações.
 
-Através dessa mineração de dados o objetivo final é tornar simples o batimento e consolidação de informações.
+No entanto, no meio do projeto o foco se tornou a criação de scripts para backtesting voltado para a cotação dos papéis. A versão Alpha provavelmente terá apenas esse fim com uma pequena parcela de seleção de ativos.

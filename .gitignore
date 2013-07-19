@@ -166,5 +166,7 @@ pip-log.txt
 *.zip
 *.csv
 data
+dataAll
+dataIbov
 download
 *.xlsx

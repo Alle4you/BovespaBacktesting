@@ -514,14 +514,14 @@ def get_trend(code):
     for i in range(12): # ignorando primeiros dias
         trend.append('')
     for i in range(12, len(ema12)):
-        if isSelected(select, quote['date'][i]):
+        #if isSelected(select, quote['date'][i]):
             diff = ema6[i] - ema12[i]
             if abs(diff) / ((ema6[i] + ema12[i]) / 2.0) < 0.01: # diferenca menor que 1%
                 trend.append('')
             else:
                 trend.append('buy' if ema6[i] > ema12[i] else 'sell')
-        else:
-            trend.append('')
+        #else:
+        #    trend.append('')
     ret = { 'date': quote['date'], 'ema-12': ema12, 'ema-6': ema6, 'trend': trend }
     return ret
 
@@ -989,8 +989,14 @@ def moneytest(bt):
     return ret
 
 
-def backtesting():
-    #import_from_jgrafix(r'C:\Tools\JGrafix\dados')
+def backtesting(imp = False, money = False):
+    if imp:
+        import_from_jgrafix(r'C:\Tools\JGrafix\dados')
+
     bt = get_backtesting_all()
-    bt = moneytest(bt)
     export_to_csv(bt, 'BackTesting.csv')
+
+    if money:
+        money = moneytest(bt)
+        export_to_csv(money, 'Money.csv')
+

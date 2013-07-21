@@ -544,9 +544,7 @@ def get_signal(code):
     return ret
 
 
-# aproveita o trend e faz compras enquanto o sinal continuar
-# stop nao se mexe
-def get_backtesting_fixed_stop(code):
+def get_backtesting(code):
     quote = load_quote(code)
     trend = get_trend(code)
     signal = get_signal(code)
@@ -584,6 +582,7 @@ def get_backtesting_fixed_stop(code):
                         end[-1] = signal['date'][signalIdx]
                         result[-1] = sell[-1] - buy[-1]
                         isLong = False
+
                     else: # apenas atualiza dados
                         sell[-1] = quote['minPrice'][signalIdx] # usando pior preco para compensar slipage
                         end[-1] = signal['date'][signalIdx]
@@ -607,79 +606,18 @@ def get_backtesting_fixed_stop(code):
     return ret
 
 
-# aproveita o trend e faz compras enquanto o sinal continuar
-# stop se mexe conforme o preco atual se move o dobro do stop anterior
-def get_backtesting_moveable_stop(code):
-    quote = load_quote(code)
-    trend = get_trend(code)
-    signal = get_signal(code)
-
-    begin = []
-    buy = []
-    stop = []
-    sell = []
-    end = []
-    result = []
-    isLong = False
-
-    for week in range(24, len(trend['trend'])):
-
-        if trend['trend'][week] == 'buy': # semana de compras
-            signalIdx = signal['date'].index(trend['date'][week]) # inicio da semana em dias
-            lastDay = trend['date'][week+1] if week+1 < len(trend['date']) else datetime.date.today() # ultimo dia do trend atual
-
-            while signalIdx < len(signal['signal']) and signal['date'][signalIdx] < lastDay: # enquanto houver dias e estivermos no trend atual
-
-                if isLong: # estamos comprados
-                    if quote['minPrice'][signalIdx] <= stop[-1]: # estourou o stop
-                        sell[-1] = stop[-1]
-                        end[-1] = signal['date'][signalIdx]
-                        result[-1] = sell[-1] - buy[-1]
-                        isLong = False
-                    elif signal['signal'][signalIdx] != 'buy': # hora de vender
-                        sell[-1] = quote['minPrice'][signalIdx] # usando pior preco para compensar slipage
-                        end[-1] = signal['date'][signalIdx]
-                        result[-1] = sell[-1] - buy[-1]
-                        isLong = False
-                    else: # apenas atualiza dados
-                        sell[-1] = quote['minPrice'][signalIdx] # usando pior preco para compensar slipage
-                        end[-1] = signal['date'][signalIdx]
-                        result[-1] = sell[-1] - buy[-1]
-                        stopSpread = quote['minPrice'][signalIdx] - stop[-1]
-                        buySpread = buy[-1] - stop[-1]
-                        if stopSpread > buySpread * 2: # se der pra subir o stop
-                            stop[-1] = signal['stop'][signalIdx]
-
-                elif signal['signal'][signalIdx] == 'buy': # hora de comprar
-                    begin.append(signal['date'][signalIdx])
-                    buy.append(quote['maxPrice'][signalIdx]) # usando pior preco para compensar slipage
-                    sell.append(quote['minPrice'][signalIdx]) # usando pior preco para compensar slipage
-                    stop.append(signal['stop'][signalIdx])
-                    end.append(signal['date'][signalIdx])
-                    result.append(sell[-1] - buy[-1])
-                    isLong = True
-
-                signalIdx = signalIdx + 1
-
-    ret = { 'begin': begin ,'buy': buy ,'stop': stop ,'sell': sell ,'end': end ,'result': result }
-    return ret
-
-
 def get_backtesting_all():
     codes = get_quote_codes()
-    tests = [ get_backtesting_fixed_stop ]
     ret = { 'begin': [] ,'buy': [], 'volume': [] ,'stop': [] ,'sell': [] ,'end': [] ,'result': [], 'code': [], 'backtesting': [] }
 
-    for test in tests:
-        print test.__name__
-        for code in codes:
-            print 'BackTesting: ' + code
-            backtesting = test(code)
-            backtestingCount = len(backtesting['begin'])
-            ret['code'] = ret['code'] + [ code ] * backtestingCount
-            ret['backtesting'] = ret['backtesting'] + [ test.__name__ ] * backtestingCount
-            for item in backtesting.keys():
-                ret[item] = ret[item] + backtesting[item]
+    for code in codes:
+        print 'BackTesting: ' + code
+        backtesting = get_backtesting(code)
+        backtestingCount = len(backtesting['begin'])
+        ret['code'] = ret['code'] + [ code ] * backtestingCount
+        ret['backtesting'] = ret['backtesting'] + [ 'backtesting' ] * backtestingCount
+        for item in backtesting.keys():
+            ret[item] = ret[item] + backtesting[item]
 
     return ret
 

@@ -573,6 +573,11 @@ def get_backtesting_fixed_stop(code):
                         end[-1] = signal['date'][signalIdx]
                         result[-1] = sell[-1] - buy[-1]
                         isLong = False
+                        sigIdx = signalIdx
+                        while sigIdx < len(signal['signal']) and signal['signal'][sigIdx] == 'buy':
+                            signal['signal'][sigIdx] = ''
+                            sigIdx = sigIdx + 1
+
                     elif signal['signal'][signalIdx] != 'buy': # hora de vender
                         sell[-1] = quote['minPrice'][signalIdx] # usando pior preco para compensar slipage
                         end[-1] = signal['date'][signalIdx]
@@ -666,7 +671,7 @@ def get_backtesting_all():
     for test in tests:
         print test.__name__
         for code in codes:
-            print '>' + code
+            print 'BackTesting: ' + code
             backtesting = test(code)
             backtestingCount = len(backtesting['begin'])
             ret['code'] = ret['code'] + [ code ] * backtestingCount
@@ -976,20 +981,67 @@ def moneytest(bt):
     for i in range(len(backtesting)): # para cada posicao com data de entrada e saida distintas
         backtesting[i].trade = i + 1
 
+    currCode = ''
     money = 100000.0
-    maxLoss = money * 0.01 # maximo de perda sobre o patrimonio total
+    maxLoss = money * 0.02 # maximo de perda sobre o patrimonio total
     begin = backtesting[0].begin
     end = backtesting[-1].end
     for i in range(len(backtesting)): # primeiro calcula o risco isolado de cada operacao
+        if currCode != backtesting[i].code:
+            currCode = backtesting[i].code
+            print 'Risk: ' + currCode        
         calcTrade(maxLoss, backtesting[i])
+    print 'Trade: ',
     for i in range(len(backtesting)): # depois reajusta baseado em trades simultaneos
+        if i % 10 == 0:
+            print '\b$',
         calcTotalTrades(money, backtesting[i], backtesting)
+    print ''
 
     ret = convertBacktesting2(backtesting)
     return ret
 
 
-def backtesting(imp = False, money = False):
+def backtesting_analysis():
+    codes = get_quote_codes()
+    ret = { }
+
+    for code in codes:
+        print 'Analysis: ' + code
+        quote = load_quote(code)
+        signal = get_signal(code)
+        trend = get_trend(code)
+
+        trendDate = []
+        trendValue = []
+
+        for i in range(len(trend['date']) - 1):
+            now = signal['date'].index(trend['date'][i])
+            after = signal['date'].index(trend['date'][i+1])
+            trendDate = trendDate + [trend['date'][i]] * (after - now)
+
+            now = signal['date'].index(trend['date'][i])
+            after = signal['date'].index(trend['date'][i+1])
+            trendValue = trendValue + [trend['trend'][i]] * (after - now)
+
+        trendDate = trendDate + [trend['date'][-1]] * ( len(signal['date']) - len(trendDate) )
+        trendValue = trendValue + [trend['trend'][-1]] * ( len(signal['date']) - len(trendValue) )
+
+        moreItems = dict(quote.items() + signal.items())
+        moreItems['code'] = [code] * len(moreItems['date'])
+        moreItems['trendDate'] = trendDate
+        moreItems['trend'] = trendValue
+
+        if len(ret.keys()) == 0:
+            ret = moreItems
+        else:
+            for i in ret.keys():
+                ret[i] = ret[i] + moreItems[i]
+
+    return ret
+
+
+def backtesting(imp = False, money = False, analysis = False):
     if imp:
         import_from_jgrafix(r'C:\Tools\JGrafix\dados')
 
@@ -999,4 +1051,8 @@ def backtesting(imp = False, money = False):
     if money:
         money = moneytest(bt)
         export_to_csv(money, 'Money.csv')
+
+    if analysis:
+        analysis = backtesting_analysis()
+        export_to_csv(analysis, 'Analysis.csv')
 

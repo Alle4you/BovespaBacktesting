@@ -553,6 +553,7 @@ def get_backtesting_fixed_stop(code):
 
     begin = []
     buy = []
+    volume = []
     stop = []
     sell = []
     end = []
@@ -593,6 +594,7 @@ def get_backtesting_fixed_stop(code):
                 elif signal['signal'][signalIdx] == 'buy': # hora de comprar
                     begin.append(signal['date'][signalIdx])
                     buy.append(quote['maxPrice'][signalIdx]) # usando pior preco para compensar slipage
+                    volume.append(quote['volume'][signalIdx]) # pegando o volume do dia para quando calcular trades
                     sell.append(quote['minPrice'][signalIdx]) # usando pior preco para compensar slipage
                     stop.append(signal['stop'][signalIdx])
                     end.append(signal['date'][signalIdx])
@@ -601,7 +603,7 @@ def get_backtesting_fixed_stop(code):
 
                 signalIdx = signalIdx + 1
 
-    ret = { 'begin': begin ,'buy': buy ,'stop': stop ,'sell': sell ,'end': end ,'result': result }
+    ret = { 'begin': begin ,'buy': buy ,'stop': stop ,'sell': sell ,'end': end ,'result': result, 'volume': volume }
     return ret
 
 
@@ -666,7 +668,7 @@ def get_backtesting_moveable_stop(code):
 def get_backtesting_all():
     codes = get_quote_codes()
     tests = [ get_backtesting_fixed_stop ]
-    ret = { 'begin': [] ,'buy': [] ,'stop': [] ,'sell': [] ,'end': [] ,'result': [], 'code': [], 'backtesting': [] }
+    ret = { 'begin': [] ,'buy': [], 'volume': [] ,'stop': [] ,'sell': [] ,'end': [] ,'result': [], 'code': [], 'backtesting': [] }
 
     for test in tests:
         print test.__name__
@@ -870,7 +872,7 @@ def import_from_fin_doc_only_complement(path):
 
 
 class Backtesting:
-    def __init__(self, begin, end, buy, sell, result, code, backtesting, stop):
+    def __init__(self, begin, end, buy, sell, result, code, backtesting, stop, volume):
         self.begin = begin
         self.end = end
         self.buy = buy
@@ -884,14 +886,16 @@ class Backtesting:
         self.trade = 0
         self.trades = 0
         self.qtd = 0
+        self.volume = volume
     def __repr__(self):
-        return repr((self.begin, self.end, self.buy, self.sell, self.result, self.code, self.backtesting, self.stop))
+        return repr((self.begin, self.end, self.buy, self.sell, self.result, self.code, self.backtesting, self.stop, self.volume))
 
 
 def convertBacktesting(bt):
     ret = []
     for i in range(len(bt['begin'])):
-        ret.append(Backtesting(bt['begin'][i], bt['end'][i], bt['buy'][i], bt['sell'][i], bt['result'][i], bt['code'][i], bt['backtesting'][i], bt['stop'][i]))
+        ret.append(Backtesting(bt['begin'][i], bt['end'][i], bt['buy'][i], bt['sell'][i], bt['result'][i], 
+            bt['code'][i], bt['backtesting'][i], bt['stop'][i], bt['volume'][i]))
     ret = sorted(ret, key=lambda k: k.begin)
     return ret
 
@@ -910,6 +914,7 @@ def convertBacktesting2(bt):
     trade = []
     trades = []
     qtd = []
+    volume = []
     for b in bt:
         begin.append(b.begin)
         end.append(b.end)
@@ -924,11 +929,13 @@ def convertBacktesting2(bt):
         trade.append(b.trade)
         trades.append(b.trades)
         qtd.append(b.qtd)
+        volume.append(b.volume)
     ret = { 'begin': begin, 'end': end, 'buy': buy, 'sell': sell, 'result': result, 
     'code': code, 'backtesting': backtesting, 'stop': stop, 'money': money, 
     'trade': trade, 'trades': trades
     ,'qtd': qtd
     ,'liquid': liquid
+    ,'volume': volume
     }
     return ret
 
@@ -941,9 +948,12 @@ def calctaxes(invest):
 def calcTrade(maxLoss, b):
     lossPerUnit = b.buy - b.stop
     b.qtd = int((maxLoss / lossPerUnit) / 100) * 100
+    cash = b.qtd * b.buy
+    if cash > (b.volume / 2):
+        b.qtd = ( b.volume / b.buy ) / 2 / 100 * 100 # no maximo compramos metade do book do dia?
 
 
-def calcTotalTrades(money, b1, bs):
+def calcTotalTrades(money, risk, b1, bs):
     b1.trades = 1
     b1.money = money
     b1.liquid = money
@@ -951,6 +961,8 @@ def calcTotalTrades(money, b1, bs):
         if b1.money <= 0.0: # acabou o dinheiro: estamos falidos
             break
         elif b2.trade == b1.trade: # somos nos mesmos
+            maxLoss = b1.money * risk # maximo de perda sobre o patrimonio total (atual)
+            calcTrade(maxLoss, b1)
             b1Price = b1.buy * b1.qtd
             b1Liquid = b1.liquid - b1Price
             if b1Liquid >= 0.0:
@@ -975,27 +987,20 @@ def calcTotalTrades(money, b1, bs):
             pass
 
 
-def moneytest(bt):
+def moneytest(bt, money = 100000, risk = 0.01):
     backtesting = convertBacktesting(bt)
 
     for i in range(len(backtesting)): # para cada posicao com data de entrada e saida distintas
         backtesting[i].trade = i + 1
 
     currCode = ''
-    money = 100000.0
-    maxLoss = money * 0.02 # maximo de perda sobre o patrimonio total
     begin = backtesting[0].begin
     end = backtesting[-1].end
-    for i in range(len(backtesting)): # primeiro calcula o risco isolado de cada operacao
-        if currCode != backtesting[i].code:
-            currCode = backtesting[i].code
-            print 'Risk: ' + currCode        
-        calcTrade(maxLoss, backtesting[i])
     print 'Trade: ',
     for i in range(len(backtesting)): # depois reajusta baseado em trades simultaneos
         if i % 10 == 0:
             print '\b$',
-        calcTotalTrades(money, backtesting[i], backtesting)
+        calcTotalTrades(money, risk, backtesting[i], backtesting)
     print ''
 
     ret = convertBacktesting2(backtesting)
@@ -1049,7 +1054,7 @@ def backtesting(imp = False, money = False, analysis = False):
     export_to_csv(bt, 'BackTesting.csv')
 
     if money:
-        money = moneytest(bt)
+        money = moneytest(bt, 100000, 0.005)
         export_to_csv(money, 'Money.csv')
 
     if analysis:

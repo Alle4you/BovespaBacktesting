@@ -553,6 +553,7 @@ def get_backtesting(code):
     buy = []
     volume = []
     stop = []
+    stop2 = []
     sell = []
     end = []
     result = []
@@ -567,9 +568,9 @@ def get_backtesting(code):
             while signalIdx < len(signal['signal']) and signal['date'][signalIdx] < lastDay: # enquanto houver dias e estivermos no trend atual
 
                 if tradeCount > 0: # estamos comprados
-                    if quote['minPrice'][signalIdx] <= stop[-1]: # estourou o stop
+                    if quote['minPrice'][signalIdx] <= stop2[-1]: # estourou o stop
                         for trades in range(-tradeCount, 0):
-                            sell[trades] = stop[trades]
+                            sell[trades] = quote['minPrice'][signalIdx] # usando pior preco para garantir papeis iliquidos
                             end[trades] = signal['date'][signalIdx]
                             result[trades] = sell[trades] - buy[trades]
                         tradeCount = 0
@@ -590,8 +591,10 @@ def get_backtesting(code):
                             sell[trades] = quote['minPrice'][signalIdx] # usando pior preco para compensar slipage
                             end[trades] = signal['date'][signalIdx]
                             result[trades] = sell[trades] - buy[trades]
-                            #if signal['stop'][signalIdx] > stop[trades]:
-                            #    stop[trades] = signal['stop'][signalIdx]
+                            drawdown = buy[trades] - stop[trades]
+                            #if result[trades] > drawdown * 2: # lucro atual eh maior que a perda no stop vezes dois
+                            #    newStop = sell[trades] - drawdown * 2
+                            #    stop2[trades] = max(newStop, stop2[trades])
                             stopSpread = quote['minPrice'][signalIdx] - stop[trades]
                             buySpread = buy[trades] - stop[trades]
                         #if stop[-1] >= buy[-1]: # risco do ultimo trade ja eh zero; podemos continuar comprando
@@ -610,19 +613,20 @@ def get_backtesting(code):
                     volume.append(quote['volume'][signalIdx]) # pegando o volume do dia para quando calcular trades
                     sell.append(quote['minPrice'][signalIdx]) # usando pior preco para compensar slipage
                     stop.append(signal['stop'][signalIdx])
+                    stop2.append(signal['stop'][signalIdx])
                     end.append(signal['date'][signalIdx])
                     result.append(sell[-1] - buy[-1])
                     tradeCount = tradeCount + 1
 
                 signalIdx = signalIdx + 1
 
-    ret = { 'begin': begin ,'buy': buy ,'stop': stop ,'sell': sell ,'end': end ,'result': result, 'volume': volume }
+    ret = { 'begin': begin ,'buy': buy ,'stop2': stop2, 'stop': stop ,'sell': sell ,'end': end ,'result': result, 'volume': volume }
     return ret
 
 
 def get_backtesting_all():
     codes = get_quote_codes()
-    ret = { 'begin': [] ,'buy': [], 'volume': [] ,'stop': [] ,'sell': [] ,'end': [] ,'result': [], 'code': [], 'backtesting': [] }
+    ret = { 'begin': [] ,'buy': [], 'volume': [] ,'stop': [] ,'stop2': [] ,'sell': [] ,'end': [] ,'result': [], 'code': [], 'backtesting': [] }
 
     for code in codes:
         print 'BackTesting: ' + code
@@ -824,7 +828,7 @@ def import_from_fin_doc_only_complement(path):
 
 
 class Backtesting:
-    def __init__(self, begin, end, buy, sell, result, code, backtesting, stop, volume):
+    def __init__(self, begin, end, buy, sell, result, code, backtesting, stop, stop2, volume):
         self.begin = begin
         self.end = end
         self.buy = buy
@@ -833,6 +837,7 @@ class Backtesting:
         self.code = code
         self.backtesting = backtesting
         self.stop = stop
+        self.stop2 = stop2
         self.money = 0.0
         self.liquid = 0.0
         self.trade = 0
@@ -840,14 +845,14 @@ class Backtesting:
         self.qtd = 0
         self.volume = volume
     def __repr__(self):
-        return repr((self.begin, self.end, self.buy, self.sell, self.result, self.code, self.backtesting, self.stop, self.volume))
+        return repr((self.begin, self.end, self.buy, self.sell, self.result, self.code, self.backtesting, self.stop, self.stop2, self.volume))
 
 
 def convertBacktesting(bt):
     ret = []
     for i in range(len(bt['begin'])):
         ret.append(Backtesting(bt['begin'][i], bt['end'][i], bt['buy'][i], bt['sell'][i], bt['result'][i], 
-            bt['code'][i], bt['backtesting'][i], bt['stop'][i], bt['volume'][i]))
+            bt['code'][i], bt['backtesting'][i], bt['stop'][i], bt['stop2'][i], bt['volume'][i]))
     ret = sorted(ret, key=lambda k: k.begin)
     return ret
 
@@ -861,6 +866,7 @@ def convertBacktesting2(bt):
     code = []
     backtesting = []
     stop = []
+    stop2 = []
     money = []
     liquid = []
     trade = []
@@ -876,6 +882,7 @@ def convertBacktesting2(bt):
         code.append(b.code)
         backtesting.append(b.backtesting)
         stop.append(b.stop)
+        stop2.append(b.stop2)
         money.append(b.money)
         liquid.append(b.liquid)
         trade.append(b.trade)
@@ -883,7 +890,7 @@ def convertBacktesting2(bt):
         qtd.append(b.qtd)
         volume.append(b.volume)
     ret = { 'begin': begin, 'end': end, 'buy': buy, 'sell': sell, 'result': result, 
-    'code': code, 'backtesting': backtesting, 'stop': stop, 'money': money, 
+    'code': code, 'backtesting': backtesting, 'stop': stop, 'stop2': stop2, 'money': money, 
     'trade': trade, 'trades': trades
     ,'qtd': qtd
     ,'liquid': liquid
@@ -951,7 +958,7 @@ def moneytest(bt, money = 100000, risk = 0.01):
     currCode = ''
     begin = backtesting[0].begin
     end = backtesting[-1].end
-    print 'Trade: ',
+    print 'Money: ',
     for i in range(len(backtesting)): # depois reajusta baseado em trades simultaneos
         if i % 10 == 0:
             print '\b$',
@@ -1009,7 +1016,7 @@ def backtesting(imp = False, money = False, analysis = False):
     export_to_csv(bt, 'BackTesting.csv')
 
     if money:
-        money = moneytest(bt, 100000, 0.005)
+        money = moneytest(bt, 100000, 0.02)
         export_to_csv(money, 'Money.csv')
 
     if analysis:

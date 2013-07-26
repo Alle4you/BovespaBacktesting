@@ -838,7 +838,8 @@ class Backtesting:
         self.backtesting = backtesting
         self.stop = stop
         self.stop2 = stop2
-        self.money = 0.0
+        self.equity = 0.0
+        self.invest = 0.0
         self.liquid = 0.0
         self.trade = 0
         self.trades = 0
@@ -867,7 +868,8 @@ def convertBacktesting2(bt):
     backtesting = []
     stop = []
     stop2 = []
-    money = []
+    equity = []
+    invest = []
     liquid = []
     trade = []
     trades = []
@@ -883,16 +885,18 @@ def convertBacktesting2(bt):
         backtesting.append(b.backtesting)
         stop.append(b.stop)
         stop2.append(b.stop2)
-        money.append(b.money)
+        equity.append(b.equity)
+        invest.append(b.invest)
         liquid.append(b.liquid)
         trade.append(b.trade)
         trades.append(b.trades)
         qtd.append(b.qtd)
         volume.append(b.volume)
     ret = { 'begin': begin, 'end': end, 'buy': buy, 'sell': sell, 'result': result, 
-    'code': code, 'backtesting': backtesting, 'stop': stop, 'stop2': stop2, 'money': money, 
+    'code': code, 'backtesting': backtesting, 'stop': stop, 'stop2': stop2, 'equity': equity, 
     'trade': trade, 'trades': trades
     ,'qtd': qtd
+    ,'invest': invest
     ,'liquid': liquid
     ,'volume': volume
     }
@@ -910,46 +914,47 @@ def calcTrade(maxLoss, b):
         b.qtd = int((maxLoss / lossPerUnit) / 100) * 100
         cash = b.qtd * b.buy
         if cash > (b.volume / 2):
-            b.qtd = ( b.volume / b.buy ) / 2 / 100 * 100 # no maximo compramos metade do book do dia?
+            b.qtd = ( (( b.volume / b.buy ) / 2) / 100) * 100 # no maximo compramos metade do book do dia?
     else:
         b.qtd = 0
 
 
-def calcTotalTrades(money, risk, b1, bs):
+def calcTotalTrades(equity, risk, b1, bs):
     b1.trades = 1
-    b1.money = money
-    b1.liquid = money
+    b1.equity = equity
+    b1.liquid = equity
+    b1.invest = 0
     for b2 in bs:
-        if b1.money <= 0.0: # acabou o dinheiro: estamos falidos
+        if b1.equity <= 0.0: # acabou o dinheiro: estamos falidos
             break
         elif b2.trade == b1.trade: # somos nos mesmos
-            maxLoss = b1.money * risk # maximo de perda sobre o patrimonio total (atual)
+            maxLoss = b1.equity * risk # maximo de perda sobre o patrimonio total (atual)
             calcTrade(maxLoss, b1)
-            b1Price = b1.buy * b1.qtd
-            b1Liquid = b1.liquid - b1Price
-            if b1Liquid >= 0.0:
-                b1.liquid = b1Liquid
+            b1.liquid = b1.equity - b1.invest
+            b1Invest = b1.buy * b1.qtd
+            if b1Invest <= b1.liquid:
+                b1.invest = b1.invest + b1Invest
+                b1.liquid = b1.liquid - b1Invest
             else:
                 b1.qtd = 0
             break
         elif b2.end <= b1.begin: # trades que terminaram antes
-            b2Money = b2.qtd * b2.result - calctaxes(b2.qtd * b2.buy) - calctaxes(b2.qtd * b2.sell)
-            if b2Money > 0.0:
-                b2Money = b2Money * 0.80 # tirando imposto de renda por antecipacao
-            money = money + b2Money
-            b1.money = money
-            b1.liquid = money
+            b2Invest = b2.qtd * b2.buy
+            b2Result = b2.qtd * b2.result - calctaxes(b2.qtd * b2.buy) - calctaxes(b2.qtd * b2.sell)
+            if b2Result > 0.0:
+                b2Result = b2Result * 0.80 # tirando imposto de renda por antecipacao
+            b1.equity = b1.equity + b2Result
         elif b2.begin <= b1.begin and b2.end >= b1.begin: # trades que comecaram antes ou ao mesmo tempo
+            b2Invest = b2.qtd * b2.buy
+            b1.invest = b1.invest + b2Invest
             b1.trades = b1.trades + 1
-            b2Price = b2.buy * b2.qtd
-            b1.liquid = b1.liquid - b2Price
         elif b2.end <= b1.end and b2.end >= b1.begin: # trades que comecaram depois
             pass
         elif b2.begin >= b1.begin and b2.end <= b1.end: # trades que comecaram depois e terminaram antes
             pass
 
 
-def moneytest(bt, money = 100000, risk = 0.01):
+def moneytest(bt, equity = 100000, risk = 0.01):
     backtesting = convertBacktesting(bt)
 
     for i in range(len(backtesting)): # para cada posicao com data de entrada e saida distintas
@@ -962,7 +967,7 @@ def moneytest(bt, money = 100000, risk = 0.01):
     for i in range(len(backtesting)): # depois reajusta baseado em trades simultaneos
         if i % 10 == 0:
             print '\b$',
-        calcTotalTrades(money, risk, backtesting[i], backtesting)
+        calcTotalTrades(equity, risk, backtesting[i], backtesting)
     print ''
 
     ret = convertBacktesting2(backtesting)

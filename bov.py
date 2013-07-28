@@ -960,9 +960,6 @@ def moneytest(bt, equity = 100000, risk = 0.01):
     for i in range(len(backtesting)): # para cada posicao com data de entrada e saida distintas
         backtesting[i].trade = i + 1
 
-    currCode = ''
-    begin = backtesting[0].begin
-    end = backtesting[-1].end
     print 'Money: ',
     for i in range(len(backtesting)): # depois reajusta baseado em trades simultaneos
         if i % 10 == 0:

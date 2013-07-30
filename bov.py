@@ -636,6 +636,9 @@ def get_backtesting_all():
         ret['backtesting'] = ret['backtesting'] + [ 'backtesting' ] * backtestingCount
         for item in backtesting.keys():
             ret[item] = ret[item] + backtesting[item]
+    ret['trade'] = []
+    for i in range(len(ret['begin'])): # para cada posicao com data de entrada e saida distintas
+        ret['trade'].append(i + 1)
 
     return ret
 
@@ -928,7 +931,8 @@ def calcTotalTrades(equity, risk, b1, bs):
         if b1.equity <= 0.0: # acabou o dinheiro: estamos falidos
             break
         elif b2.trade == b1.trade: # somos nos mesmos
-            maxLoss = b1.equity * risk # maximo de perda sobre o patrimonio total (atual)
+            #maxLoss = b1.equity * risk # maximo de perda sobre o patrimonio total (atual)
+            maxLoss = equity * risk # maximo de perda sobre o patrimonio total (atual)
             calcTrade(maxLoss, b1)
             b1.liquid = b1.equity - b1.invest
             b1Invest = b1.buy * b1.qtd
@@ -968,6 +972,29 @@ def moneytest(bt, equity = 100000, risk = 0.01):
     print ''
 
     ret = convertBacktesting2(backtesting)
+    return ret
+
+
+def moneytest2(bt, equity = 100000, risk = 0.01):
+    backtesting = convertBacktesting(bt)
+    begin = backtesting[0].begin
+    end = datetime.date.today()
+    diff = end - begin
+    days = []
+
+    for i in range(0, diff.days + 1):
+        days.append(begin + datetime.timedelta(i))
+        
+    #print 'Money: ',
+    #for i in range(len(backtesting)): # depois reajusta baseado em trades simultaneos
+    #    if i % 10 == 0:
+    #        print '\b$',
+    #    calcTotalTrades(equity, risk, backtesting[i], backtesting)
+    #print ''
+
+    #ret = convertBacktesting2(backtesting)
+
+    ret = { 'days': days }
     return ret
 
 
@@ -1018,7 +1045,7 @@ def backtesting(imp = False, money = False, analysis = False):
     export_to_csv(bt, 'BackTesting.csv')
 
     if money:
-        money = moneytest(bt, 100000, 0.02)
+        money = moneytest2(bt, 100000, 0.02)
         export_to_csv(money, 'Money.csv')
 
     if analysis:

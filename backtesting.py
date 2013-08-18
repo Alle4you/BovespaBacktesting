@@ -110,26 +110,41 @@ def load_known_codes():
     return ret
 
 
-class BackTesting:
-    def __init__(self, begin, end, buy, sell, result, code, backtesting, stop, stop2, volume):
-        self.begin = begin
-        self.end = end
-        self.buy = buy
-        self.sell = sell
-        self.result = result
-        self.code = code
-        self.backtesting = backtesting
-        self.stop = stop
-        self.stop2 = stop2
-        self.equity = 0.0
-        self.invest = 0.0
-        self.liquid = 0.0
-        self.trade = 0
-        self.trades = 0
-        self.qtd = 0
-        self.volume = volume
-    def __repr__(self):
-        return repr((self.begin, self.end, self.buy, self.sell, self.result, self.code, self.backtesting, self.stop, self.stop2, self.volume))
+class Trade:
+    """Informacoes de um trade."""
+    pass
+
+
+def export_trades_to_csv(trades, filePath):
+
+    def write_header(f):
+        f.write("trade" + ';')
+        f.write("code" + ';')
+        f.write("begin" + ';')
+        f.write("buy" + ';')
+        f.write("volume" + ';')
+        f.write("sell" + ';')
+        f.write("stop" + ';')
+        f.write("stop2" + ';')
+        f.write("end" + ';')
+        f.write("result")
+        f.write('\n')
+
+    f = open(filePath, 'w')
+    write_header(f)
+    for trade in trades:
+        f.write(str(trade.trade) + ';')
+        f.write(str(trade.code) + ';')
+        f.write(str(trade.begin) + ';')
+        f.write(str(trade.buy) + ';')
+        f.write(str(trade.volume) + ';')
+        f.write(str(trade.sell) + ';')
+        f.write(str(trade.stop) + ';')
+        f.write(str(trade.stop2) + ';')
+        f.write(str(trade.end) + ';')
+        f.write(str(trade.result))
+        f.write('\n')
+    f.close()
 
 
 def export_to_csv(data, filePath):
@@ -160,10 +175,10 @@ def sma(quote, days = 10):
 def ema(quote, days = 10):
     """Calculo de Exponential Moving Average."""
     price = quote['closePrice']
-    sma = sma(quote, days)
+    code_sma = sma(quote, days)
     ret = []
-    for i in range(min(len(sma), days)):
-        ret.append(sma[i])
+    for i in range(min(len(code_sma), days)):
+        ret.append(code_sma[i])
     multiplier = ( 2.0 / (float(days) + 1.0) )
     for i in range(days, len(price)):
         ret.append( (price[i] - ret[i-1]) * multiplier + ret[i-1] )
@@ -252,7 +267,6 @@ def trend(code):
             if k < dt: ret = v
         return ret
 
-    select = select_company(code)
     quote = load_data(code, 'week')
     ema12 = ema(quote, 12)
     ema6 = ema(quote, 6)
@@ -260,7 +274,6 @@ def trend(code):
     for i in range(12): # ignorando primeiros dias
         trend.append('')
     for i in range(12, len(ema12)):
-        #if isSelected(select, quote['date'][i]):
             diff = ema6[i] - ema12[i]
             if abs(diff) / ((ema6[i] + ema12[i]) / 2.0) < 0.01: # diferenca menor que 1%
                 trend.append('')
@@ -291,144 +304,91 @@ def signal(code):
     return ret
 
 
-def get_backtesting(code):
+def calc_trades(code):
+    ret = []
     quote = load_quote_data(code)
-    trend = trend(code)
-    signal = signal(code)
-
-    begin = []
-    buy = []
-    volume = []
-    stop = []
-    stop2 = []
-    sell = []
-    end = []
-    result = []
+    code_trend = trend(code)
+    code_signal = signal(code)
     tradeCount = 0
 
-    for week in range(24, len(trend['trend'])):
+    for week in range(24, len(code_trend['trend'])):
 
-        if trend['trend'][week] == 'buy': # semana de compras
-            signalIdx = signal['date'].index(trend['date'][week]) # inicio da semana em dias
-            lastDay = trend['date'][week+1] if week+1 < len(trend['date']) else datetime.date.today() # ultimo dia do trend atual
+        if code_trend['trend'][week] == 'buy': # semana de compras
+            signalIdx = code_signal['date'].index(code_trend['date'][week]) # inicio da semana em dias
+            lastDay = code_trend['date'][week+1] if week+1 < len(code_trend['date']) else datetime.date.today() # ultimo dia do trend atual
 
-            while signalIdx < len(signal['signal']) and signal['date'][signalIdx] < lastDay: # enquanto houver dias e estivermos no trend atual
+            while signalIdx < len(code_signal['signal']) and code_signal['date'][signalIdx] < lastDay: # enquanto houver dias e estivermos no trend atual
 
                 if tradeCount > 0: # estamos comprados
-                    if quote['minPrice'][signalIdx] <= stop2[-1]: # estourou o stop
+                    if quote['minPrice'][signalIdx] <= ret[-1].stop2: # estourou o stop
                         for trades in range(-tradeCount, 0):
-                            sell[trades] = quote['minPrice'][signalIdx] # usando pior preco para garantir papeis iliquidos
-                            end[trades] = signal['date'][signalIdx]
-                            result[trades] = sell[trades] - buy[trades]
+                            ret[trades].sell = quote['minPrice'][signalIdx] # usando pior preco para garantir papeis iliquidos
+                            ret[trades].end = code_signal['date'][signalIdx]
+                            ret[trades].result = ret[trades].sell - ret[trades].buy
                         tradeCount = 0
                         sigIdx = signalIdx
-                        while sigIdx < len(signal['signal']) and signal['signal'][sigIdx] == 'buy':
-                            signal['signal'][sigIdx] = ''
+                        while sigIdx < len(code_signal['signal']) and code_signal['signal'][sigIdx] == 'buy':
+                            code_signal['signal'][sigIdx] = ''
                             sigIdx = sigIdx + 1
 
-                    elif signal['signal'][signalIdx] != 'buy': # hora de vender
+                    elif code_signal['signal'][signalIdx] != 'buy': # hora de vender
                         for trades in range(-tradeCount, 0):
-                            sell[trades] = quote['minPrice'][signalIdx] # usando pior preco para compensar slipage
-                            end[trades] = signal['date'][signalIdx]
-                            result[trades] = sell[trades] - buy[trades]
+                            ret[trades].sell = quote['minPrice'][signalIdx] # usando pior preco para compensar slipage
+                            ret[trades].end = code_signal['date'][signalIdx]
+                            ret[trades].result = ret[trades].sell - ret[trades].buy
                         tradeCount = 0
 
                     else: # apenas atualiza dados
                         for trades in range(-tradeCount, 0):
-                            sell[trades] = quote['minPrice'][signalIdx] # usando pior preco para compensar slipage
-                            end[trades] = signal['date'][signalIdx]
-                            result[trades] = sell[trades] - buy[trades]
-                            drawdown = buy[trades] - stop[trades]
+                            ret[trades].sell = quote['minPrice'][signalIdx] # usando pior preco para compensar slipage
+                            ret[trades].end = code_signal['date'][signalIdx]
+                            ret[trades].result = ret[trades].sell - ret[trades].buy
+                            drawdown = ret[trades].buy - ret[trades].stop
                             #if result[trades] > drawdown * 2: # lucro atual eh maior que a perda no stop vezes dois
                             #    newStop = sell[trades] - drawdown * 2
                             #    stop2[trades] = max(newStop, stop2[trades])
-                            stopSpread = quote['minPrice'][signalIdx] - stop[trades]
-                            buySpread = buy[trades] - stop[trades]
+                            stopSpread = quote['minPrice'][signalIdx] - ret[trades].stop
+                            buySpread = ret[trades].buy - ret[trades].stop
                         #if stop[-1] >= buy[-1]: # risco do ultimo trade ja eh zero; podemos continuar comprando
-                        #    begin.append(signal['date'][signalIdx])
+                        #    begin.append(code_signal['date'][signalIdx])
                         #    buy.append(quote['maxPrice'][signalIdx]) # usando pior preco para compensar slipage
                         #    volume.append(quote['volume'][signalIdx]) # pegando o volume do dia para quando calcular trades
                         #    sell.append(quote['minPrice'][signalIdx]) # usando pior preco para compensar slipage
-                        #    stop.append(signal['stop'][signalIdx])
-                        #    end.append(signal['date'][signalIdx])
+                        #    stop.append(code_signal['stop'][signalIdx])
+                        #    end.append(code_signal['date'][signalIdx])
                         #    result.append(sell[-1] - buy[-1])
                         #    tradeCount = tradeCount + 1
 
-                elif signal['signal'][signalIdx] == 'buy': # hora de comprar
-                    begin.append(signal['date'][signalIdx])
-                    buy.append(quote['maxPrice'][signalIdx]) # usando pior preco para compensar slipage
-                    volume.append(quote['volume'][signalIdx]) # pegando o volume do dia para quando calcular trades
-                    sell.append(quote['minPrice'][signalIdx]) # usando pior preco para compensar slipage
-                    stop.append(signal['stop'][signalIdx])
-                    stop2.append(signal['stop'][signalIdx])
-                    end.append(signal['date'][signalIdx])
-                    result.append(sell[-1] - buy[-1])
+                elif code_signal['signal'][signalIdx] == 'buy': # hora de comprar
+                    trade = Trade()
+                    ret.append(trade)
+                    trade.code = code
+                    trade.begin = code_signal['date'][signalIdx]
+                    trade.buy = quote['maxPrice'][signalIdx] # usando pior preco para compensar slipage
+                    trade.volume = quote['volume'][signalIdx] # pegando o volume do dia para quando calcular trades
+                    trade.sell = quote['minPrice'][signalIdx] # usando pior preco para compensar slipage
+                    trade.stop = code_signal['stop'][signalIdx]
+                    trade.stop2 = code_signal['stop'][signalIdx]
+                    trade.end = code_signal['date'][signalIdx]
+                    trade.result = ret[-1].sell - ret[-1].buy
                     tradeCount = tradeCount + 1
 
                 signalIdx = signalIdx + 1
 
-    ret = { 'begin': begin ,'buy': buy ,'stop2': stop2, 'stop': stop ,'sell': sell ,'end': end ,'result': result, 'volume': volume }
     return ret
 
 
-def get_backtesting_all():
+def get_all_trades():
+    ret = []
     codes = load_known_codes()
-    ret = { 'begin': [] ,'buy': [], 'volume': [] ,'stop': [] ,'stop2': [] ,'sell': [] ,'end': [] ,'result': [], 'code': [], 'backtesting': [] }
 
     for code in codes:
         print 'BackTesting: ' + code
-        backtesting = get_backtesting(code)
-        backtestingCount = len(backtesting['begin'])
-        ret['code'] = ret['code'] + [ code ] * backtestingCount
-        ret['backtesting'] = ret['backtesting'] + [ 'backtesting' ] * backtestingCount
-        for item in backtesting.keys():
-            ret[item] = ret[item] + backtesting[item]
-    ret['trade'] = []
-    for i in range(len(ret['begin'])): # para cada posicao com data de entrada e saida distintas
-        ret['trade'].append(i + 1)
+        ret = ret + calc_trades(code)
+    ret = sorted(ret, key = lambda trade: trade.begin)
+    for i in range(len(ret)): # para cada posicao com data de entrada e saida distintas
+        ret[i].trade = i
 
-    return ret
-
-
-def get_backtesting_signal_fixed_stop(code):
-    quote = load_quote_data(code)
-    trend = trend(code)
-    signal = signal(code)
-    date = []
-    retsignal = []
-
-    for week in range(24, len(trend['trend'])):
-
-        if trend['trend'][week] == 'buy': # semana de compras
-            signalIdx = signal['date'].index(trend['date'][week]) # inicio da semana em dias
-            lastDay = trend['date'][week+1] if week+1 < len(trend['date']) else datetime.date.today() # ultimo dia do trend atual
-
-            while signalIdx < len(signal['signal']) and signal['date'][signalIdx] < lastDay: # enquanto houver dias e estivermos no trend atual
-
-                date.append(signal['date'][signalIdx])
-                if signal['signal'][signalIdx] == 'buy': # hora de comprar
-                    retsignal.append('buy')
-                else:
-                    retsignal.append('')
-
-                signalIdx = signalIdx + 1
-
-    ret = { 'date': date, 'signal': retsignal }
-    return ret
-
-def backtesting_select_current():
-    codes = load_known_codes()
-    date = []
-    retsignal = []
-    retcode = []
-    for code in codes:
-        backtesting = get_backtesting_signal_fixed_stop(code)
-        if len(backtesting['signal']) and backtesting['signal'][-1] == 'buy':
-            date.append(backtesting['date'][-1])
-            retsignal.append(backtesting['signal'][-1])
-            retcode.append(code)
-
-    ret = { 'date': date, 'code': retcode, 'signal': retsignal }
     return ret
 
 
@@ -621,14 +581,14 @@ def backtesting(imp = False, money = False, analysis = False):
     if imp:
         import_quote_from_jgrafix(r'C:\Tools\JGrafix\dados')
 
-    bt = get_backtesting_all()
-    export_to_csv(bt, 'BackTesting.csv')
+    trades = get_all_trades()
+    export_trades_to_csv(trades, 'Trades.csv')
 
-    if money:
-        money = moneytest2(bt, 100000, 0.02)
-        export_to_csv(money, 'Money.csv')
+    #if money:
+    #    money = moneytest2(bt, 100000, 0.02)
+    #    export_to_csv(money, 'Money.csv')
 
-    if analysis:
-        analysis = backtesting_analysis()
-        export_to_csv(analysis, 'Analysis.csv')
+    #if analysis:
+    #    analysis = backtesting_analysis()
+    #    export_to_csv(analysis, 'Analysis.csv')
 

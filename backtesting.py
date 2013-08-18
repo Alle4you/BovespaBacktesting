@@ -110,6 +110,28 @@ def load_known_codes():
     return ret
 
 
+class BackTesting:
+    def __init__(self, begin, end, buy, sell, result, code, backtesting, stop, stop2, volume):
+        self.begin = begin
+        self.end = end
+        self.buy = buy
+        self.sell = sell
+        self.result = result
+        self.code = code
+        self.backtesting = backtesting
+        self.stop = stop
+        self.stop2 = stop2
+        self.equity = 0.0
+        self.invest = 0.0
+        self.liquid = 0.0
+        self.trade = 0
+        self.trades = 0
+        self.qtd = 0
+        self.volume = volume
+    def __repr__(self):
+        return repr((self.begin, self.end, self.buy, self.sell, self.result, self.code, self.backtesting, self.stop, self.stop2, self.volume))
+
+
 def export_to_csv(data, filePath):
     f = open(filePath, 'w')
     maxLine = 100000000
@@ -126,6 +148,7 @@ def export_to_csv(data, filePath):
 
 
 def sma(quote, days = 10):
+    """Calculo de Simple Moving Average."""
     price = quote['closePrice']
     ret = []
     for i in range(len(price)):
@@ -135,6 +158,7 @@ def sma(quote, days = 10):
 
 
 def ema(quote, days = 10):
+    """Calculo de Exponential Moving Average."""
     price = quote['closePrice']
     sma = sma(quote, days)
     ret = []
@@ -147,6 +171,7 @@ def ema(quote, days = 10):
 
 
 def macd(quote, shortDays = 12, longDays = 26, signalDays = 9):
+    """Calculo de MACD."""
     price = quote['closePrice']
     shortMacd = ema(price, shortDays)
     longMacd = ema(price, longDays)
@@ -161,6 +186,7 @@ def macd(quote, shortDays = 12, longDays = 26, signalDays = 9):
     return ret
 
 def stop_safeplace(quote, multiplier = 4):
+    """Calculo de metodo de stop."""
     price = quote['minPrice']
     low = [ 0.0 ]
     for i in range(1, len(price)):
@@ -188,6 +214,7 @@ def stop_safeplace(quote, multiplier = 4):
 
 
 def stop_atr(quote, multiplier = 3):
+    """Calculo de metodo de stop."""
     minPrice = quote['minPrice']
     maxPrice = quote['maxPrice']
     closePrice = quote['closePrice']
@@ -216,7 +243,8 @@ def stop_atr(quote, multiplier = 3):
 
 
 
-def get_trend(code):
+def trend(code):
+    """Calculo de tendencia."""
 
     def isSelected(select, dt):
         ret = False
@@ -245,6 +273,7 @@ def get_trend(code):
 
 
 def signal(code):
+    """Calculo de sinal de operacao."""
     quote = load_quote_data(code)
     ema24 = ema(quote, 24)
     ema12 = ema(quote, 12)
@@ -264,7 +293,7 @@ def signal(code):
 
 def get_backtesting(code):
     quote = load_quote_data(code)
-    trend = get_trend(code)
+    trend = trend(code)
     signal = signal(code)
 
     begin = []
@@ -363,7 +392,7 @@ def get_backtesting_all():
 
 def get_backtesting_signal_fixed_stop(code):
     quote = load_quote_data(code)
-    trend = get_trend(code)
+    trend = trend(code)
     signal = signal(code)
     date = []
     retsignal = []
@@ -401,28 +430,6 @@ def backtesting_select_current():
 
     ret = { 'date': date, 'code': retcode, 'signal': retsignal }
     return ret
-
-
-class BackTesting:
-    def __init__(self, begin, end, buy, sell, result, code, backtesting, stop, stop2, volume):
-        self.begin = begin
-        self.end = end
-        self.buy = buy
-        self.sell = sell
-        self.result = result
-        self.code = code
-        self.backtesting = backtesting
-        self.stop = stop
-        self.stop2 = stop2
-        self.equity = 0.0
-        self.invest = 0.0
-        self.liquid = 0.0
-        self.trade = 0
-        self.trades = 0
-        self.qtd = 0
-        self.volume = volume
-    def __repr__(self):
-        return repr((self.begin, self.end, self.buy, self.sell, self.result, self.code, self.backtesting, self.stop, self.stop2, self.volume))
 
 
 def convertBacktesting(bt):
@@ -579,7 +586,7 @@ def backtesting_analysis():
         print 'Analysis: ' + code
         quote = load_quote_data(code)
         signal = signal(code)
-        trend = get_trend(code)
+        trend = trend(code)
 
         trendDate = []
         trendValue = []

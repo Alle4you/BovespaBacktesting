@@ -10,268 +10,52 @@ import pickle
 DATA_PATH = 'data'
 QUOTE_FILE_NAME = 'quote'
 QUOTE_WEEK_FILE_NAME = 'week'
-FIN_ITR_DATES = [ '03-31', '06-30', '09-30' ]
 
 
-def isitr(dt):
-    return True if dt.month in [3, 6, 9] else False
+def import_quote_from_jgrafix(dataPath):
+    """Importa informacoes da cotacao historica do aplicativo JGrafix."""
 
-def geturl(cvmcode, pubdata):
-    return 'http://www.bmfbovespa.com.br/dxw/Download.asp?moeda=L&site=B&mercado=18&ccvm=' + str(cvmcode) + '&data=' + pubdata + '&tipo=2'
+    def read_quotedoc(path):
+        print path
+        ret = []
+        lines = list(open(path, 'r'))
+        for currLine in lines:
+            m = re.search(r'(\d+/\d+/\d+) ([0-9.]+) ([0-9.]+) ([0-9.]+) ([0-9.]+) ([0-9]+) ([0-9.]+) ([0-9.]+)', currLine)
+            if m:
+                ret.append(m.group(1, 2, 3, 4, 5, 6, 7, 8))
+        return ret
 
-def getquoteurl(year):
-    return 'http://www.bmfbovespa.com.br/InstDados/SerHist/COTAHIST_A' + str(year) + '.ZIP'
+    def get_week_quote(quote):
+        ret = { 'date': [], 'openPrice': [], 'minPrice': [], 'maxPrice': [], 'closePrice': [], 'volume': [] }
+        get_week_quote.currWeekNumber = 0
 
-def CarregaArquivoZip(url):
-    webRes = urllib2.urlopen(url)
-    doc = webRes.read()
-    return zipfile.ZipFile(StringIO.StringIO(doc))
+        def init_week(quotePos):
+            get_week_quote.currWeekNumber = quote['date'][quotePos].isocalendar()[1]
+            ret['date'].append(quote['date'][quotePos])
+            ret['openPrice'].append(quote['openPrice'][quotePos])
+            ret['minPrice'].append(quote['minPrice'][quotePos])
+            ret['maxPrice'].append(quote['maxPrice'][quotePos])
+            ret['closePrice'].append(quote['closePrice'][quotePos])
+            ret['volume'].append(quote['volume'][quotePos])
 
-def opendoc(cvmcode, year):
-    """Carrega informacoes financeiras do site da Bovespa
-    
-    O cvmcode pode ser obtido no site da Bovespa (Empresas Listadas).
-    """
-    pubdata = '31/12/' + str(year)
-    url = geturl(cvmcode, pubdata)
-    try:
-        zip = CarregaArquivoZip(url)
-        for name in ['DFPCDERE.001', 'WINDOWS/TEMP_CVM/DFPCDERE.001']:
-            if name in zip.namelist():
-                doc = zip.read(name)
-                break
-        else: raise KeyError
-        reglines = [re.match(r'^(.{6})(.{4})(.{2})(.{2})(.{13})(.{40})(.{15})(.{15})(.{15})(.{1})', x) for x in doc.splitlines()]
-        lines = [[x.strip() for x in reglines[i].groups()] for i in range(len(reglines))]
-        return [lines[x][4:-3] for x in range(len(lines))]
-    except zipfile.BadZipfile:
-        print 'Zip invalido para ', pubdata
-    except KeyError:
-        print 'Documento nao encontrado em ', pubdata
-    return None
+        def upd_week(quotePos):
+            ret['minPrice'][-1] = min(ret['minPrice'][-1], quote['minPrice'][quotePos])
+            ret['maxPrice'][-1] = max(ret['maxPrice'][-1], quote['maxPrice'][quotePos])
+            ret['closePrice'][-1] = quote['closePrice'][quotePos]
+            ret['volume'][-1] += quote['volume'][quotePos]
 
-def getquotedocname(year):
-    if int(year) == 2001:
-        return 'COTAHIST_A' + str(year)
-    elif int(year) < 2001:
-        return 'COTAHIST.A' + str(year)
-    else:
-        return 'COTAHIST_A' + str(year) + '.TXT'
+        for i in range(len(quote['date'])):
+            weekNumber = quote['date'][i].isocalendar()[1]
+            upd_week(i) if get_week_quote.currWeekNumber == weekNumber else init_week(i)
+        return ret
 
-def openquotedoc(year):
-    """Carrega cotacao historica do site da Bovespa
-
-    Essa operacao pode demorar um pouco, pois o arquivo geralmente tem alguns megas.
-    """
-    url = getquoteurl(year)
-    try:
-        zip = CarregaArquivoZip(url)
-        docname = getquotedocname(year)
-        if docname in zip.namelist():
-            return zip.read(docname)
-    except zipfile.BadZipfile:
-        print 'Zip invalido para ', year
-    except KeyError:
-        print 'Documento nao encontrado em ', year
-    print 'Erro ao abrir documento do ano ', year
-    
-def openquotedocbyfile(path):
-    """Carrega cotacao historica de arquivo ZIP baixado do site da Bovespa.
-    """
-    try:
-        zip = zipfile.ZipFile(path, 'r')
-        docname = zip.namelist()[0]
-        return zip.read(docname)
-    except zipfile.BadZipfile:
-        print 'Zip invalido'
-    except KeyError:
-        print 'Documento nao encontrado'
-    
-def printquoteheader():
-    print 'Data Pregao;Abertura;Minima;Maxima;Fechamento'
-
-def printquoteline(line):
-    date = line[8:10] + '/' + line[6:8] + '/' + line[2:6]
-    open = float(line[56:69]) / 100
-    min = float(line[82:95]) / 100
-    max = float(line[69:82]) / 100
-    close = float(line[108:121]) / 100
-    print date + ';' + str(open) + ';' + str(min) + ';' + str(max) + ';' + str(close)
-
-def printquotelinesbydate(code, lines, beginDate, endDate):
-    printquoteheader()
-    for line in lines:
-        if line[12:23].strip() == code:
-            lineDate = datetime.date(int(line[2:6]), int(line[6:8]), int(line[8:10]))
-            if lineDate >= beginDate and lineDate <= endDate:
-                printquoteline(line)
-
-def getquotecodes(lines):
-    """ Obtem lista de codigos dos papeis que foram operados.
-
-    Passe o resultado da chamada de loadquotelines.
-    """
-    codelist = []
-    for line in lines:
-        code = line[12:23].strip()
-        if code not in codelist:
-            codelist += code
-    return codelist
-
-def printquotelines(code, lines):
-    printquoteheader()
-    for line in lines:
-        if line[12:23].strip() == code:
-            printquoteline(line)
-
-def printquote(code, year):
-    doc = openquotedoc(year)
-    lines = doc.split('\n')
-    printquotelines(code, lines)
-
-def loadquotelines(beginYear, endYear):
-    totalLines = []
-    for year in range(beginYear, endYear + 1):
-        doc = openquotedoc(year)
-        lines = doc.split('\n')
-        totalLines = totalLines + lines
-    return totalLines
-
-def filter_findoc(path):
-    import xml.etree.ElementTree as ET
-    tree = ET.parse(path)
-    root = tree.getroot()
-    newTree = ET.ElementTree()
-    newRoot = ET.Element('Data')
-    finLista = root.findall('InfoFinaDFin')    
-    for finInfo in root.iter('InfoFinaDFin'):
-        finCode = finInfo.find('PlanoConta').find('VersaoPlanoConta').find('CodigoTipoInformacaoFinanceira')
-        if finCode.text == '2': # informacoes consolidadas
-            newEntry = ET.Element('InfoFinaDFin')
-            newEntry.append(finInfo.find('PlanoConta').find('NumeroConta'))
-            newEntry.append(finInfo.find('DescricaoConta1'))
-            newEntry.append(finInfo.find('ValorConta1'))
-            newEntry.append(finInfo.find('ValorConta2'))
-            newEntry.append(finInfo.find('ValorConta3'))
-            newRoot.append(newEntry)
-    newTree._setroot(newRoot)
-    newTree.write(path[:-4] + '-result.xml')
-
-
-def catalog_findoc_zip(zip, fileNameTip = ''):
-    import xml.etree.ElementTree as ET
-
-    try:
-        xmlName = None
-        for name in [ 'FormularioDemonstracaoFinanceiraDFP.xml', 'FormularioDemonstracaoFinanceiraITR.xml' ]:
-            if name in zip.namelist():
-                xmlName = name
-                break
-        if xmlName != None:
-            xmlFile = zip.read(xmlName)
-            dfp = ET.fromstring(xmlFile)
-            cia = dfp.find('CompanhiaAberta').find('NomeRazaoSocialCompanhiaAberta').text.strip()
-            cia = re.sub('[/]', '-', cia)
-            data = dfp.find('DataReferenciaDocumento').text[0:10]
-            fileNameTip = cia + '-' + xmlName[-7:-4] + '-' + data + '.zip'
-            #print 'Arquivo ' + fileName + ' salvo com sucesso!'
-        else:
-            print 'Arquivo ' + fileNameTip + ' nao possui formulario; ignorando...'
-    except Exception as e:
-        print 'Erro analisando arquivo: ' + str(e)
-    return fileNameTip
-
-
-def get_company_name(zip):
-    import xml.etree.ElementTree as ET
-    ret = None
-
-    try:
-        xmlName = None
-        for name in [ 'FormularioDemonstracaoFinanceiraDFP.xml', 'FormularioDemonstracaoFinanceiraITR.xml' ]:
-            if name in zip.namelist():
-                xmlName = name
-                break
-        if xmlName != None:
-            xmlFile = zip.read(xmlName)
-            dfp = ET.fromstring(xmlFile)
-            ret = dfp.find('CompanhiaAberta').find('NomeRazaoSocialCompanhiaAberta').text.strip()
-    except Exception as e:
-        print 'Erro analisando arquivo: ' + str(e)
-
-    return ret
-
-
-def get_fin_date(zip):
-    import xml.etree.ElementTree as ET
-    ret = None
-
-    try:
-        xmlName = None
-        for name in [ 'FormularioDemonstracaoFinanceiraDFP.xml', 'FormularioDemonstracaoFinanceiraITR.xml' ]:
-            if name in zip.namelist():
-                xmlName = name
-                break
-        if xmlName != None:
-            xmlFile = zip.read(xmlName)
-            dfp = ET.fromstring(xmlFile)
-            ret = dfp.find('DataReferenciaDocumento').text[0:10]
-    except Exception as e:
-        print 'Erro analisando arquivo: ' + str(e)
-
-    return ret
-
-
-
-def catalog_findoc_url(url, docNumber):
-    import xml.etree.ElementTree as ET
-
-    try:
-        webRes = urllib2.urlopen(url)
-        content = webRes.read()
-        fileName = str(docNumber) + '.zip'
-
-        try:
-            zip = zipfile.ZipFile(StringIO.StringIO(content))
-            fileName = catalog_findoc_zip(zip, fileName)
-        except:
-            print 'Arquivo #' + str(docNumber) + ' invalido; ignorando...'
-
-        file = open(fileName, 'wb')
-        file.write(content)
-        file.close()
-
-    except Exception as e:
-        print 'Erro fatal com arquivo #' + str(docNumber) + ':' + str(e)
-
-
-def download_findoc(docNumber):
-    urlbase = r'http://www.rad.cvm.gov.br/enetconsulta/frmDownloadDocumento.aspx?CodigoInstituicao=2&NumeroSequencialDocumento='
-    docUrl = urlbase + str(docNumber)
-    catalog_findoc_url(docUrl, docNumber)
-
-def rename_findoc(path):
-    zip = zipfile.ZipFile(path, 'r')
-    return catalog_findoc_zip(zip)
-
-def read_quotedoc(path):
-    print path
-    ret = []
-    lines = list(open(path, 'r'))
-    for currLine in lines:
-        m = re.search(r'(\d+/\d+/\d+) ([0-9.]+) ([0-9.]+) ([0-9.]+) ([0-9.]+) ([0-9]+) ([0-9.]+) ([0-9.]+)', currLine)
-        if m:
-            ret.append(m.group(1, 2, 3, 4, 5, 6, 7, 8))
-    return ret
-
-def import_from_jgrafix(jgrafixDocsPath):
     from os.path import isfile, join
     filterPath = join(DATA_PATH, 'filterCodes')
-    quoteDocs = [ f for f in os.listdir(jgrafixDocsPath) if isfile(join(jgrafixDocsPath, f)) ]
+    quoteDocs = [ f for f in os.listdir(dataPath) if isfile(join(dataPath, f)) ]
     filterCodes = [item.lower()[:-1] for item in list(open(filterPath, 'r'))]
     filterDocs = [ f for f in quoteDocs if f in filterCodes ]
     for doc in filterDocs:
-        quote = read_quotedoc(join(jgrafixDocsPath, doc))
+        quote = read_quotedoc(join(dataPath, doc))
         if len(quote) > 0:
             destPath = join(DATA_PATH, doc)
             if not os.path.exists(destPath):
@@ -290,20 +74,8 @@ def import_from_jgrafix(jgrafixDocsPath):
             write_data(doc, QUOTE_WEEK_FILE_NAME, weekDict)
 
 
-def load_companyToCode():
-    codes = [item[:-1] for item in list(open(r'data\companyToCode', 'r'))]
-    ret = {}
-    for cod in codes:
-        company = cod[0:13].strip()
-        code = cod[13:].strip()
-        if company in ret:
-            ret[company].append(code)
-        else:
-            ret[company] = [ code ]
-    return ret
-
-
 def load_data(code, dataName):
+    """Carrega informacoes armazenadas na pasta de dados."""
     from os.path import isfile, join
     ret = None
     code = code.lower()
@@ -314,32 +86,28 @@ def load_data(code, dataName):
         f.close()
     return ret
 
-
-def load_quote(code):
-    return load_data(code, QUOTE_FILE_NAME)
-
-
-def load_week_quote(code):
-    return load_data(code, QUOTE_WEEK_FILE_NAME)
-
-
-def get_quote_codes():
-    from os.path import isdir, join
-    ret = [ f for f in os.listdir(DATA_PATH) if isdir(join(DATA_PATH, f)) ]
-    return ret
-
-
-def get_fin_accounts():
-    return [item[:-1] for item in list(open(r'data\filterAccounts', 'r'))]
-
-
 def write_data(code, dataName, data):
+    """Escreve informacoes para a pasta de dados."""
     from os.path import isfile, join
     code = code.lower()
     codePath = join(join(DATA_PATH, code), dataName)
     f = open(codePath, 'w')
     pickle.dump(data, f)
     f.close()
+
+def load_quote_data(code):
+    """Carrega historico de cotacao diaria do papel especificado."""
+    return load_data(code, QUOTE_FILE_NAME)
+
+def load_week_quote_data(code):
+    """Carrega historico de cotacao semanal do papel especificado."""
+    return load_data(code, QUOTE_WEEK_FILE_NAME)
+
+def load_known_codes():
+    """Retorna a lista de papeis conhecidos."""
+    from os.path import isdir, join
+    ret = [ f for f in os.listdir(DATA_PATH) if isdir(join(DATA_PATH, f)) ]
+    return ret
 
 
 def export_to_csv(data, filePath):
@@ -357,32 +125,7 @@ def export_to_csv(data, filePath):
     f.close()
 
 
-def get_week_quote(quote):
-    ret = { 'date': [], 'openPrice': [], 'minPrice': [], 'maxPrice': [], 'closePrice': [], 'volume': [] }
-    get_week_quote.currWeekNumber = 0
-
-    def init_week(quotePos):
-        get_week_quote.currWeekNumber = quote['date'][quotePos].isocalendar()[1]
-        ret['date'].append(quote['date'][quotePos])
-        ret['openPrice'].append(quote['openPrice'][quotePos])
-        ret['minPrice'].append(quote['minPrice'][quotePos])
-        ret['maxPrice'].append(quote['maxPrice'][quotePos])
-        ret['closePrice'].append(quote['closePrice'][quotePos])
-        ret['volume'].append(quote['volume'][quotePos])
-
-    def upd_week(quotePos):
-        ret['minPrice'][-1] = min(ret['minPrice'][-1], quote['minPrice'][quotePos])
-        ret['maxPrice'][-1] = max(ret['maxPrice'][-1], quote['maxPrice'][quotePos])
-        ret['closePrice'][-1] = quote['closePrice'][quotePos]
-        ret['volume'][-1] += quote['volume'][quotePos]
-
-    for i in range(len(quote['date'])):
-        weekNumber = quote['date'][i].isocalendar()[1]
-        upd_week(i) if get_week_quote.currWeekNumber == weekNumber else init_week(i)
-    return ret
-
-
-def get_sma(quote, days = 10):
+def sma(quote, days = 10):
     price = quote['closePrice']
     ret = []
     for i in range(len(price)):
@@ -391,9 +134,9 @@ def get_sma(quote, days = 10):
     return ret
 
 
-def get_ema(quote, days = 10):
+def ema(quote, days = 10):
     price = quote['closePrice']
-    sma = get_sma(quote, days)
+    sma = sma(quote, days)
     ret = []
     for i in range(min(len(sma), days)):
         ret.append(sma[i])
@@ -403,21 +146,21 @@ def get_ema(quote, days = 10):
     return ret
 
 
-def get_macd(quote, shortDays = 12, longDays = 26, signalDays = 9):
+def macd(quote, shortDays = 12, longDays = 26, signalDays = 9):
     price = quote['closePrice']
-    shortMacd = get_ema(price, shortDays)
-    longMacd = get_ema(price, longDays)
+    shortMacd = ema(price, shortDays)
+    longMacd = ema(price, longDays)
     macd = []
     for i in range(len(price)):
         macd.append(shortMacd[i] - longMacd[i])
-    signal = get_ema(macd, signalDays)
+    signal = ema(macd, signalDays)
     hist = []
     for i in range(len(price)):
         hist.append(macd[i] - signal[i])
     ret = { 'macd': macd, 'signal': signal, 'hist': hist }
     return ret
 
-def get_stop_safeplace(quote, multiplier = 4):
+def stop_safeplace(quote, multiplier = 4):
     price = quote['minPrice']
     low = [ 0.0 ]
     for i in range(1, len(price)):
@@ -444,34 +187,7 @@ def get_stop_safeplace(quote, multiplier = 4):
     return ret
 
 
-def get_stop_candelabro(quote, multiplier = 4):
-    minPrice = quote['minPrice']
-    maxPrice = quote['maxPrice']
-    closePrice = quote['closePrice']
-    highLow = [ maxPrice[0] - minPrice[0] ]
-    highClose = [ 0.0 ]
-    lowClose = [ 0.0 ]
-    tr = [ highLow[0] ]
-
-    for i in range(1, len(minPrice)):
-        highLow.append(maxPrice[i] - minPrice[i])
-        highClose.append(abs(maxPrice[i] - closePrice[i-1]))
-        lowClose.append(abs(minPrice[i] - closePrice[i-1]))
-        tr.append(max(highLow[i], highClose[i], lowClose[i]))
-
-    atr = []
-    atrSumDays = 14
-    ret = []
-    for i in range(len(minPrice)):
-        l = tr[ max(i - atrSumDays + 1, 0) : i + 1 ]
-        atr.append( sum(l) / len(l) if len(l) < atrSumDays else (atr[i-1] * (atrSumDays-1) + tr[i]) / atrSumDays )
-        l = maxPrice[ max(i - atrSumDays + 1, 0) : i + 1 ]
-        ret.append(max(l) - (atr[i] * multiplier))
-    #testRet = { 'highLow': highLow, 'highClose': highClose, 'lowClose': lowClose, 'tr': tr, 'atr': atr, 'stop': ret }
-    return ret
-
-
-def get_stop_atr(quote, multiplier = 3):
+def stop_atr(quote, multiplier = 3):
     minPrice = quote['minPrice']
     maxPrice = quote['maxPrice']
     closePrice = quote['closePrice']
@@ -498,18 +214,20 @@ def get_stop_atr(quote, multiplier = 3):
     return ret
 
 
-def isSelected(select, dt):
-    ret = False
-    for k, v in sorted(select.iteritems()):
-        if k < dt: ret = v
-    return ret
 
 
 def get_trend(code):
+
+    def isSelected(select, dt):
+        ret = False
+        for k, v in sorted(select.iteritems()):
+            if k < dt: ret = v
+        return ret
+
     select = select_company(code)
     quote = load_data(code, 'week')
-    ema12 = get_ema(quote, 12)
-    ema6 = get_ema(quote, 6)
+    ema12 = ema(quote, 12)
+    ema6 = ema(quote, 6)
     trend = []
     for i in range(12): # ignorando primeiros dias
         trend.append('')
@@ -526,11 +244,11 @@ def get_trend(code):
     return ret
 
 
-def get_signal(code):
-    quote = load_quote(code)
-    ema24 = get_ema(quote, 24)
-    ema12 = get_ema(quote, 12)
-    stop = get_stop_safeplace(quote)
+def signal(code):
+    quote = load_quote_data(code)
+    ema24 = ema(quote, 24)
+    ema12 = ema(quote, 12)
+    stop = stop_safeplace(quote)
     signal = []
     for i in range(24): # ignorando primeiros dias
         signal.append('')
@@ -545,9 +263,9 @@ def get_signal(code):
 
 
 def get_backtesting(code):
-    quote = load_quote(code)
+    quote = load_quote_data(code)
     trend = get_trend(code)
-    signal = get_signal(code)
+    signal = signal(code)
 
     begin = []
     buy = []
@@ -625,7 +343,7 @@ def get_backtesting(code):
 
 
 def get_backtesting_all():
-    codes = get_quote_codes()
+    codes = load_known_codes()
     ret = { 'begin': [] ,'buy': [], 'volume': [] ,'stop': [] ,'stop2': [] ,'sell': [] ,'end': [] ,'result': [], 'code': [], 'backtesting': [] }
 
     for code in codes:
@@ -644,9 +362,9 @@ def get_backtesting_all():
 
 
 def get_backtesting_signal_fixed_stop(code):
-    quote = load_quote(code)
+    quote = load_quote_data(code)
     trend = get_trend(code)
-    signal = get_signal(code)
+    signal = signal(code)
     date = []
     retsignal = []
 
@@ -670,7 +388,7 @@ def get_backtesting_signal_fixed_stop(code):
     return ret
 
 def backtesting_select_current():
-    codes = get_quote_codes()
+    codes = load_known_codes()
     date = []
     retsignal = []
     retcode = []
@@ -685,152 +403,7 @@ def backtesting_select_current():
     return ret
 
 
-
-# selecao fundamentalista em revisao
-def select_company_old(code):
-    fin = load_data(code, 'fin')
-    ret = { }
-    if fin != None:
-        for dt, dfp in fin.iteritems():
-            profit = []
-            if '3.11' in dfp and len(dfp['3.11']) == 4:
-                profit.append(dfp['3.11'][0])
-                profit.append(dfp['3.11'][2])
-            elif '3.11' in dfp and len(dfp['3.11']) == 3:
-                profit.append(dfp['3.11'][0])
-                profit.append(dfp['3.11'][1])
-            elif '3.11' in dfp and len(dfp['3.11']) == 2:
-                profit.append(dfp['3.11'][0])
-                profit.append(dfp['3.11'][1])
-            ret[dt] = True if len(profit) == 2 and profit[0] > profit[1] else False
-    return ret
-
-
-def select_company(code):
-    quote = load_quote(code)
-    ret = { }
-    volume = 0.0
-    volumeTot = 0.0
-    days = 0
-    for i in range(len(quote['date'])):
-        qv = quote['volume'][i]
-        qd = quote['date'][i]
-        if days == 0:
-            days = days + 1
-            volumeTot = qv
-            volume = volumeTot
-        else:
-            if days < 60:
-                days = days + 1
-            else:
-                volumeTot = volumeTot - volume
-        volumeTot = volumeTot + qv
-        volume = volumeTot / days
-        ret[qd] = volume > 100000
-    return ret
-
-
-def load_inner_fin_zip(zip):
-    for name in zip.namelist():
-        if name[-3:] == 'itr' or name[-3:] == 'dfp':
-            return zipfile.ZipFile(StringIO.StringIO(zip.read(name)))
-
-
-def import_from_fin_doc(path):
-    import xml.etree.ElementTree as ET
-
-    zip = zipfile.ZipFile(path, 'r')
-    company = get_company_name(zip)
-    finDate = get_fin_date(zip)
-
-    if company and finDate:
-        print path, company, finDate
-        fdate = datetime.date(int(finDate[0:4]), int(finDate[5:7]), int(finDate[8:10]))
-
-        companies = load_companyToCode()
-        codes = set(get_quote_codes())
-        finAccounts = get_fin_accounts();
-
-        if company in companies:
-            companyCodes = list(set(companies[company]) & codes)
-            if len(companyCodes):
-                zip = load_inner_fin_zip(zip)
-                if zip and 'InfoFinaDFin.xml' in zip.namelist():
-                    xmlFile = zip.read('InfoFinaDFin.xml')
-                    dfp = ET.fromstring(xmlFile)
-                    finLista = dfp.findall('InfoFinaDFin')    
-                    finData = { }
-
-                    for finInfo in dfp.iter('InfoFinaDFin'):
-                        finCode = finInfo.find('PlanoConta').find('VersaoPlanoConta').find('CodigoTipoInformacaoFinanceira')
-                        if finCode.text == '2': # informacoes consolidadas
-                            accountCode = finInfo.find('PlanoConta').find('NumeroConta')
-                            if accountCode.text in finAccounts:
-                                accountValues = []
-                                for i in range(1, 13):
-                                    accountNumber = 'ValorConta' + str(i)
-                                    accountValue = float(finInfo.find(accountNumber).text)
-                                    if accountValue != 0.0:
-                                        accountValues.append(accountValue)
-                                finData[accountCode.text] = accountValues
-
-                    for cod in companyCodes:
-                        fin = load_data(cod, 'fin')
-                        if fin == None: fin = { }
-                        fin[fdate] = finData
-                        write_data(cod, 'fin', fin)
-
-
-def import_from_fin_doc_only_complement(path):
-    import xml.etree.ElementTree as ET
-
-    zip = zipfile.ZipFile(path, 'r')
-    company = get_company_name(zip)
-    finDate = get_fin_date(zip)
-
-    if company and finDate:
-        print path, company, finDate
-        fdate = datetime.date(int(finDate[0:4]), int(finDate[5:7]), int(finDate[8:10]))
-
-        companies = load_companyToCode()
-        codes = set(get_quote_codes())
-        finAccounts = get_fin_accounts();
-
-        if company in companies:
-            companyCodes = list(set(companies[company]) & codes)
-            if len(companyCodes):
-                zip = load_inner_fin_zip(zip)
-                shareCount = 0.0
-                profitPerShare = 0.0
-
-                if zip and 'ComposicaoCapitalSocialDemonstracaoFinanceiraNegocios.xml' in zip.namelist():
-                    xmlFile = zip.read('ComposicaoCapitalSocialDemonstracaoFinanceiraNegocios.xml')
-                    root = ET.fromstring(xmlFile)
-                    shareTag = root.find('ComposicaoCapitalSocialDemonstracaoFinanceira')
-                    if shareTag != None:
-                        shareCountTag = shareTag.find('QuantidadeTotalAcaoCapitalIntegralizado')
-                        if shareCountTag != None:
-                            shareCount = float(shareCountTag.text)
-
-                if zip and 'PagamentoProventoDinheiroDemonstracaoFinanceiraNegocios.xml' in zip.namelist():
-                    xmlFile = zip.read('PagamentoProventoDinheiroDemonstracaoFinanceiraNegocios.xml')
-                    root = ET.fromstring(xmlFile)
-                    profitTag = root.find('PagamentoProventoDinheiroDemonstracaoFinanceira')
-                    if profitTag != None:
-                        profitCountTag = profitTag.find('ValorProventoPorAcao')
-                        if profitCountTag != None:
-                            profitPerShare = float(profitCountTag.text)
-
-                for cod in companyCodes:
-                    fin = load_data(cod, 'fin')
-                    if fin != None and fdate in fin:
-                        finData = fin[fdate]
-                        finData['shareCount'] = shareCount
-                        finData['profitPerShare'] = profitPerShare
-                        write_data(cod, 'fin', fin)
-
-
-class Backtesting:
+class BackTesting:
     def __init__(self, begin, end, buy, sell, result, code, backtesting, stop, stop2, volume):
         self.begin = begin
         self.end = end
@@ -855,7 +428,7 @@ class Backtesting:
 def convertBacktesting(bt):
     ret = []
     for i in range(len(bt['begin'])):
-        ret.append(Backtesting(bt['begin'][i], bt['end'][i], bt['buy'][i], bt['sell'][i], bt['result'][i], 
+        ret.append(BackTesting(bt['begin'][i], bt['end'][i], bt['buy'][i], bt['sell'][i], bt['result'][i], 
             bt['code'][i], bt['backtesting'][i], bt['stop'][i], bt['stop2'][i], bt['volume'][i]))
     ret = sorted(ret, key=lambda k: k.begin)
     return ret
@@ -999,13 +572,13 @@ def moneytest2(bt, equity = 100000, risk = 0.01):
 
 
 def backtesting_analysis():
-    codes = get_quote_codes()
+    codes = load_known_codes()
     ret = { }
 
     for code in codes:
         print 'Analysis: ' + code
-        quote = load_quote(code)
-        signal = get_signal(code)
+        quote = load_quote_data(code)
+        signal = signal(code)
         trend = get_trend(code)
 
         trendDate = []
@@ -1039,7 +612,7 @@ def backtesting_analysis():
 
 def backtesting(imp = False, money = False, analysis = False):
     if imp:
-        import_from_jgrafix(r'C:\Tools\JGrafix\dados')
+        import_quote_from_jgrafix(r'C:\Tools\JGrafix\dados')
 
     bt = get_backtesting_all()
     export_to_csv(bt, 'BackTesting.csv')

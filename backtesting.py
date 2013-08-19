@@ -123,30 +123,32 @@ def export_trades_to_csv(trades, filePath):
 
     def write_header(f):
         f.write("trade" + ';')
-        f.write("code" + ';')
         f.write("begin" + ';')
-        f.write("buy" + ';')
-        f.write("volume" + ';')
-        f.write("sell" + ';')
-        f.write("stop" + ';')
-        f.write("stop2" + ';')
         f.write("end" + ';')
-        f.write("result")
+        f.write("code" + ';')
+        f.write("volume" + ';')
+        f.write("qtd" + ';')
+        f.write("buy" + ';')
+        f.write("sell" + ';')
+        f.write("result" + ';')
+        f.write("stop" + ';')
+        f.write("stop2")
         f.write('\n')
 
     f = open(filePath, 'w')
     write_header(f)
     for trade in trades:
         f.write(str(trade.trade) + ';')
-        f.write(str(trade.code) + ';')
         f.write(str(trade.begin) + ';')
-        f.write(str(trade.buy) + ';')
-        f.write(str(trade.volume) + ';')
-        f.write(str(trade.sell) + ';')
-        f.write(str(trade.stop) + ';')
-        f.write(str(trade.stop2) + ';')
         f.write(str(trade.end) + ';')
-        f.write(str(trade.result))
+        f.write(str(trade.code) + ';')
+        f.write(str(trade.volume) + ';')
+        f.write(str(trade.qtd) + ';')
+        f.write(str(trade.buy) + ';')
+        f.write(str(trade.sell) + ';')
+        f.write(str(trade.result) + ';')
+        f.write(str(trade.stop) + ';')
+        f.write(str(trade.stop2))
         f.write('\n')
     f.close()
 
@@ -394,6 +396,7 @@ def calc_trades(code):
                     trade = Trade()
                     ret.append(trade)
                     trade.code = code
+                    trade.qtd = 0
                     trade.begin = code_signal['date'][signalIdx]
                     trade.buy = quote['maxPrice'][signalIdx] # usando pior preco para compensar slipage
                     trade.volume = quote['volume'][signalIdx] # pegando o volume do dia para quando calcular trades
@@ -623,16 +626,17 @@ def backtesting_analysis():
     return ret
 
 
-def backtesting(imp = False, money = False, analysis = False):
+def backtesting(imp = False, money = False, analysis = False, equity = 100000, risk = 0.01):
     if imp:
         import_quote_from_jgrafix(r'C:\Tools\JGrafix\dados')
 
     trades = calc_all_trades()
-    export_trades_to_csv(trades, 'Trades.csv')
 
     if money:
-        money = calc_money(trades, 100000, 0.01)
+        money = calc_money(trades, equity, risk)
         export_money_to_csv(money, 'Money.csv')
+
+    export_trades_to_csv(trades, 'Trades.csv')
 
     #if analysis:
     #    analysis = backtesting_analysis()

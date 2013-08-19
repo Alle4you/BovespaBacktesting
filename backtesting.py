@@ -114,6 +114,10 @@ class Trade:
     """Informacoes de um trade."""
     pass
 
+class Money:
+    """Informacoes do gerenciamento de dinheiro."""
+    pass
+
 
 def export_trades_to_csv(trades, filePath):
 
@@ -143,6 +147,33 @@ def export_trades_to_csv(trades, filePath):
         f.write(str(trade.stop2) + ';')
         f.write(str(trade.end) + ';')
         f.write(str(trade.result))
+        f.write('\n')
+    f.close()
+
+def export_money_to_csv(money, filePath):
+
+    def write_header(f):
+        f.write("day;")
+        f.write("cash;")
+        f.write("invest;")
+        f.write("equity;")
+        f.write("buy;")
+        f.write("sell;")
+        f.write("begin;")
+        f.write("end")
+        f.write('\n')
+
+    f = open(filePath, 'w')
+    write_header(f)
+    for m in money:
+        f.write(str(m.day) + ';')
+        f.write(str(m.cash) + ';')
+        f.write(str(m.invest) + ';')
+        f.write(str(m.equity) + ';')
+        f.write(str(m.buy) + ';')
+        f.write(str(m.sell) + ';')
+        f.write(str([x.trade for x in m.begin]) + ';')
+        f.write(str([x.trade for x in m.end]))
         f.write('\n')
     f.close()
 
@@ -378,7 +409,7 @@ def calc_trades(code):
     return ret
 
 
-def get_all_trades():
+def calc_all_trades():
     ret = []
     codes = load_known_codes()
 
@@ -451,18 +482,9 @@ def calctaxes(invest):
     return ret
 
 
-def calcTrade(maxLoss, b):
-    lossPerUnit = b.buy - b.stop
-    if lossPerUnit > 0:
-        b.qtd = int((maxLoss / lossPerUnit) / 100) * 100
-        cash = b.qtd * b.buy
-        if cash > (b.volume / 2):
-            b.qtd = ( (( b.volume / b.buy ) / 2) / 100) * 100 # no maximo compramos metade do book do dia?
-    else:
-        b.qtd = 0
 
 
-def calcTotalTrades(equity, risk, b1, bs):
+def calc_total_trades(equity, risk, b1, bs):
     b1.trades = 1
     b1.equity = equity
     b1.liquid = equity
@@ -498,43 +520,67 @@ def calcTotalTrades(equity, risk, b1, bs):
             pass
 
 
-def moneytest(bt, equity = 100000, risk = 0.01):
-    backtesting = convertBacktesting(bt)
+def calc_money(trades, equity = 100000, risk = 0.01):
 
-    for i in range(len(backtesting)): # para cada posicao com data de entrada e saida distintas
-        backtesting[i].trade = i + 1
+    def calc_trade(maxLoss, trade):
+        lossPerUnit = trade.buy - trade.stop
+        if lossPerUnit > 0:
+            trade.qtd = int((maxLoss / lossPerUnit) / 100) * 100
+            cash = trade.qtd * trade.buy
+            if cash > (trade.volume / 2):
+                trade.qtd = ( (( trade.volume / trade.buy ) / 2) / 100) * 100 # no maximo compramos metade do book do dia?
+        else:
+            trade.qtd = 0
 
-    print 'Money: ',
-    for i in range(len(backtesting)): # depois reajusta baseado em trades simultaneos
-        if i % 10 == 0:
-            print '\b$',
-        calcTotalTrades(equity, risk, backtesting[i], backtesting)
-    print ''
-
-    ret = convertBacktesting2(backtesting)
-    return ret
-
-
-def moneytest2(bt, equity = 100000, risk = 0.01):
-    backtesting = convertBacktesting(bt)
-    begin = backtesting[0].begin
+    ret = []
+    begin = trades[0].begin
     end = datetime.date.today()
     diff = end - begin
-    days = []
+    totalequity = equity # patrimonio total
+    totalcash = totalequity # quanto esta em dinheiro
+    totalinvest = 0.0 # quanto esta investido
 
     for i in range(0, diff.days + 1):
-        days.append(begin + datetime.timedelta(i))
-        
-    #print 'Money: ',
-    #for i in range(len(backtesting)): # depois reajusta baseado em trades simultaneos
-    #    if i % 10 == 0:
-    #        print '\b$',
-    #    calcTotalTrades(equity, risk, backtesting[i], backtesting)
-    #print ''
+        money = Money()
+        money.day = begin + datetime.timedelta(i)
+        ret.append(money)
 
-    #ret = convertBacktesting2(backtesting)
+    print 'Money:'
+    for day in ret:
 
-    ret = { 'days': days }
+        # seleciona os trades que entram e saem no dia
+        day.begin = filter(lambda beg: day.day == beg.begin, trades)
+        day.end = filter(lambda beg: day.day == beg.end, trades)
+
+        # para cada entrada, calcula cash envolvido e o resultado total
+        day.buy = 0.0
+        for trade in day.begin:
+            maxLoss = totalcash * risk
+            calc_trade(maxLoss, trade)
+            cash = trade.qtd * trade.buy
+            if cash <= totalcash:
+                day.buy = day.buy + cash
+                totalcash = totalcash - cash
+                totalinvest = totalinvest + cash
+
+        # para cada saida, calcula cash resultante
+        day.sell = 0.0
+        for trade in day.end:
+            cash = trade.qtd * trade.sell
+            buy = trade.qtd * trade.buy
+            day.sell = day.sell + cash
+            totalcash = totalcash + cash
+            totalinvest = totalinvest - buy
+
+        totalequity = totalinvest + totalcash
+        day.equity = totalequity
+        day.invest = totalinvest
+        day.cash = totalcash
+
+        if day.day.day == 1:
+            print day.day
+    print ''
+
     return ret
 
 
@@ -581,12 +627,12 @@ def backtesting(imp = False, money = False, analysis = False):
     if imp:
         import_quote_from_jgrafix(r'C:\Tools\JGrafix\dados')
 
-    trades = get_all_trades()
+    trades = calc_all_trades()
     export_trades_to_csv(trades, 'Trades.csv')
 
-    #if money:
-    #    money = moneytest2(bt, 100000, 0.02)
-    #    export_to_csv(money, 'Money.csv')
+    if money:
+        money = calc_money(trades, 100000, 0.01)
+        export_money_to_csv(money, 'Money.csv')
 
     #if analysis:
     #    analysis = backtesting_analysis()

@@ -376,25 +376,25 @@ def calc_trades(code):
                             ret[trades].sell = quote['minPrice'][signalIdx] # usando pior preco para compensar slipage
                             ret[trades].end = code_signal['date'][signalIdx]
                             ret[trades].result = ret[trades].sell - ret[trades].buy
-                            drawdown = ret[trades].buy - ret[trades].stop
-                            #if result[trades] > drawdown * 2: # lucro atual eh maior que a perda no stop vezes dois
-                            #    newStop = sell[trades] - drawdown * 2
-                            #    stop2[trades] = max(newStop, stop2[trades])
                             stopSpread = quote['minPrice'][signalIdx] - ret[trades].stop
                             buySpread = ret[trades].buy - ret[trades].stop
-                        #if stop[-1] >= buy[-1]: # risco do ultimo trade ja eh zero; podemos continuar comprando
-                        #    begin.append(code_signal['date'][signalIdx])
-                        #    buy.append(quote['maxPrice'][signalIdx]) # usando pior preco para compensar slipage
-                        #    volume.append(quote['volume'][signalIdx]) # pegando o volume do dia para quando calcular trades
-                        #    sell.append(quote['minPrice'][signalIdx]) # usando pior preco para compensar slipage
-                        #    stop.append(code_signal['stop'][signalIdx])
-                        #    end.append(code_signal['date'][signalIdx])
-                        #    result.append(sell[-1] - buy[-1])
+                        #if ret[-1].result > (ret[-1].buy - ret[-1].stop) * 2: # acumulando
+                        #    trade = Trade()
+                        #    trade.code = code
+                        #    trade.qtd = 0
+                        #    trade.begin = code_signal['date'][signalIdx]
+                        #    trade.buy = quote['maxPrice'][signalIdx] # usando pior preco para compensar slipage
+                        #    trade.volume = quote['volume'][signalIdx] # pegando o volume do dia para quando calcular trades
+                        #    trade.sell = quote['minPrice'][signalIdx] # usando pior preco para compensar slipage
+                        #    trade.stop = code_signal['stop'][signalIdx]
+                        #    trade.stop2 = code_signal['stop'][signalIdx]
+                        #    trade.end = code_signal['date'][signalIdx]
+                        #    trade.result = trade.sell - trade.buy
+                        #    ret.append(trade)
                         #    tradeCount = tradeCount + 1
 
                 elif code_signal['signal'][signalIdx] == 'buy': # hora de comprar
                     trade = Trade()
-                    ret.append(trade)
                     trade.code = code
                     trade.qtd = 0
                     trade.begin = code_signal['date'][signalIdx]
@@ -404,7 +404,8 @@ def calc_trades(code):
                     trade.stop = code_signal['stop'][signalIdx]
                     trade.stop2 = code_signal['stop'][signalIdx]
                     trade.end = code_signal['date'][signalIdx]
-                    trade.result = ret[-1].sell - ret[-1].buy
+                    trade.result = trade.sell - trade.buy
+                    ret.append(trade)
                     tradeCount = tradeCount + 1
 
                 signalIdx = signalIdx + 1

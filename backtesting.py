@@ -160,7 +160,9 @@ def export_money_to_csv(money, filePath):
         f.write("invest;")
         f.write("equity;")
         f.write("buy;")
-        f.write("sell")
+        f.write("sell;")
+        f.write("wage;")
+        f.write("deposit")
         #f.write("begin;")
         #f.write("end")
         f.write('\n')
@@ -173,7 +175,9 @@ def export_money_to_csv(money, filePath):
         f.write(str(m.invest) + ';')
         f.write(str(m.equity) + ';')
         f.write(str(m.buy) + ';')
-        f.write(str(m.sell))
+        f.write(str(m.sell) + ';')
+        f.write(str(m.wage) + ';')
+        f.write(str(m.deposit))
         #f.write(str([x.trade for x in m.begin]) + ';')
         #f.write(str([x.trade for x in m.end]))
         f.write('\n')
@@ -378,20 +382,20 @@ def calc_trades(code):
                             ret[trades].result = ret[trades].sell - ret[trades].buy
                             stopSpread = quote['minPrice'][signalIdx] - ret[trades].stop
                             buySpread = ret[trades].buy - ret[trades].stop
-                        #if ret[-1].result > (ret[-1].buy - ret[-1].stop) * 2: # acumulando
-                        #    trade = Trade()
-                        #    trade.code = code
-                        #    trade.qtd = 0
-                        #    trade.begin = code_signal['date'][signalIdx]
-                        #    trade.buy = quote['maxPrice'][signalIdx] # usando pior preco para compensar slipage
-                        #    trade.volume = quote['volume'][signalIdx] # pegando o volume do dia para quando calcular trades
-                        #    trade.sell = quote['minPrice'][signalIdx] # usando pior preco para compensar slipage
-                        #    trade.stop = code_signal['stop'][signalIdx]
-                        #    trade.stop2 = code_signal['stop'][signalIdx]
-                        #    trade.end = code_signal['date'][signalIdx]
-                        #    trade.result = trade.sell - trade.buy
-                        #    ret.append(trade)
-                        #    tradeCount = tradeCount + 1
+                        if ret[-1].result > (ret[-1].buy - ret[-1].stop) * 2: # acumulando
+                            trade = Trade()
+                            trade.code = code
+                            trade.qtd = 0
+                            trade.begin = code_signal['date'][signalIdx]
+                            trade.buy = quote['maxPrice'][signalIdx] # usando pior preco para compensar slipage
+                            trade.volume = quote['volume'][signalIdx] # pegando o volume do dia para quando calcular trades
+                            trade.sell = quote['minPrice'][signalIdx] # usando pior preco para compensar slipage
+                            trade.stop = ret[-1].stop
+                            trade.stop2 = ret[-1].stop2
+                            trade.end = code_signal['date'][signalIdx]
+                            trade.result = trade.sell - trade.buy
+                            ret.append(trade)
+                            tradeCount = tradeCount + 1
 
                 elif code_signal['signal'][signalIdx] == 'buy': # hora de comprar
                     trade = Trade()
@@ -550,11 +554,17 @@ def calc_money(trades, equity = 100000, risk = 0.01):
         ret.append(money)
 
     print 'Money:'
+    topequity = totalequity
+    lowequity = totalequity
+    investdrawdown = 0.10
+    investgrow = 0.50
     for day in ret:
 
         # seleciona os trades que entram e saem no dia
         day.begin = filter(lambda beg: day.day == beg.begin, trades)
         day.end = filter(lambda beg: day.day == beg.end, trades)
+        day.wage = 0.0
+        day.deposit = 0.0
 
         # para cada entrada, calcula cash envolvido e o resultado total
         day.buy = 0.0
@@ -577,6 +587,32 @@ def calc_money(trades, equity = 100000, risk = 0.01):
             totalinvest = totalinvest - buy
 
         totalequity = totalinvest + totalcash
+
+        # se for dia de pagamento, retiramos nosso "salario"
+        #if day.day.month == 1 and day.day.day == 1:
+        #    day.wage = totalequity * risk * 12
+        #    totalcash -= day.wage
+        #    totalequity -= day.wage
+
+        # se for hora de investir mais, fazer deposito
+        if day.day.month == 1 and day.day.day == 1:
+            day.deposit = 25000
+            totalcash += day.deposit
+            totalequity += day.deposit
+
+        #topequity = max(topequity, totalequity)
+        #lowequity = min(lowequity, totalequity)
+        #drawdown = (topequity - totalequity) / topequity
+        #grow = (totalequity - lowequity) / totalequity
+        #if drawdown > investdrawdown:
+        #    day.deposit = 50000
+        #    totalcash += day.deposit
+        #    totalequity += day.deposit
+        #elif grow > investgrow:
+        #    day.deposit -= (totalequity * investgrow / 2)
+        #    totalcash += day.deposit
+        #    totalequity += day.deposit
+
         day.equity = totalequity
         day.invest = totalinvest
         day.cash = totalcash
@@ -642,4 +678,13 @@ def backtesting(imp = False, money = False, analysis = False, equity = 100000, r
     #if analysis:
     #    analysis = backtesting_analysis()
     #    export_to_csv(analysis, 'Analysis.csv')
+
+def btday():
+    import_quote_from_jgrafix(r'C:\Tools\JGrafix\dados') # importando dados (que ja devem estar atualizados)
+    trades = calc_all_trades()
+    today = datetime.date.today()
+
+    # seleciona os trades que entram e saem no dia
+    todaytrades = filter(lambda beg: beg.end == today, trades)
+    print todaytrades
 

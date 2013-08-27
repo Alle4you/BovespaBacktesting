@@ -528,7 +528,7 @@ def calc_total_trades(equity, risk, b1, bs):
             pass
 
 
-def calc_money(trades, equity = 100000, risk = 0.01):
+def calc_money(trades, equity, risk, deposit, wage):
 
     def calc_trade(maxLoss, trade):
         lossPerUnit = trade.buy - trade.stop
@@ -588,30 +588,18 @@ def calc_money(trades, equity = 100000, risk = 0.01):
 
         totalequity = totalinvest + totalcash
 
-        # se for dia de pagamento, retiramos nosso "salario"
-        #if day.day.month == 1 and day.day.day == 1:
-        #    day.wage = totalequity * risk * 12
-        #    totalcash -= day.wage
-        #    totalequity -= day.wage
-
-        # se for hora de investir mais, fazer deposito
+        # se for dia de pagamento, retiramos nosso "salario"...
         if day.day.month == 1 and day.day.day == 1:
-            day.deposit = 25000
+            day.wage = wage(totalequity, risk)
+            totalcash -= day.wage
+            totalequity -= day.wage
+            # ... e separa o valor de reinvestimento (ou investimento)
+            if day.wage:
+                day.deposit = day.wage * 0.10
+            else:
+                day.deposit = deposit
             totalcash += day.deposit
             totalequity += day.deposit
-
-        #topequity = max(topequity, totalequity)
-        #lowequity = min(lowequity, totalequity)
-        #drawdown = (topequity - totalequity) / topequity
-        #grow = (totalequity - lowequity) / totalequity
-        #if drawdown > investdrawdown:
-        #    day.deposit = 50000
-        #    totalcash += day.deposit
-        #    totalequity += day.deposit
-        #elif grow > investgrow:
-        #    day.deposit -= (totalequity * investgrow / 2)
-        #    totalcash += day.deposit
-        #    totalequity += day.deposit
 
         day.equity = totalequity
         day.invest = totalinvest
@@ -663,14 +651,22 @@ def backtesting_analysis():
     return ret
 
 
-def backtesting(imp = False, money = False, analysis = False, equity = 100000, risk = 0.01):
+def backtesting(imp = False, money = False, analysis = False, equity = 100000, risk = 0.005, deposit = 50000, minwageequity = 1000000):
+
+    def calcwage(minequity):
+        def retwage(equity, risk):
+            if equity >= minequity:
+                return equity * risk * 12
+            return 0.0
+        return retwage
+
     if imp:
         import_quote_from_jgrafix(r'C:\Tools\JGrafix\dados')
 
     trades = calc_all_trades()
 
     if money:
-        money = calc_money(trades, equity, risk)
+        money = calc_money(trades, equity, risk, deposit, calcwage(minwageequity))
         export_money_to_csv(money, 'Money.csv')
 
     export_trades_to_csv(trades, 'Trades.csv')
@@ -679,12 +675,20 @@ def backtesting(imp = False, money = False, analysis = False, equity = 100000, r
     #    analysis = backtesting_analysis()
     #    export_to_csv(analysis, 'Analysis.csv')
 
-def btday():
+
+def impquote():
     import_quote_from_jgrafix(r'C:\Tools\JGrafix\dados') # importando dados (que ja devem estar atualizados)
+
+def trades():
     trades = calc_all_trades()
-    today = datetime.date.today()
+    lastest = trades[-1].end
 
     # seleciona os trades que entram e saem no dia
-    todaytrades = filter(lambda beg: beg.end == today, trades)
-    print todaytrades
+    lasttrades = filter(lambda beg: beg.end == lastest, trades)
+    for trade in lasttrades:
+        print trade.code + '    @' + str(trade.buy) + '    stop ' + str(trade.stop2)
+
+def day():
+    impquote()
+    trades()
 

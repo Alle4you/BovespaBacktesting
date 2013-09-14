@@ -159,6 +159,7 @@ def export_money_to_csv(money, filePath):
         f.write("cash;")
         f.write("invest;")
         f.write("equity;")
+        f.write("risk;")
         f.write("buy;")
         f.write("sell;")
         f.write("wage;")
@@ -174,6 +175,7 @@ def export_money_to_csv(money, filePath):
         f.write(str(m.cash) + ';')
         f.write(str(m.invest) + ';')
         f.write(str(m.equity) + ';')
+        f.write(str(m.risk) + ';')
         f.write(str(m.buy) + ';')
         f.write(str(m.sell) + ';')
         f.write(str(m.wage) + ';')
@@ -305,39 +307,37 @@ def trend(code):
         return ret
 
     quote = load_data(code, 'week')
-    ema12 = ema(quote, 12)
-    ema6 = ema(quote, 6)
+    longTrend = ema(quote, 12)
+    shortTrend = ema(quote, 6)
     trend = []
     for i in range(12): # ignorando primeiros dias
         trend.append('')
-    for i in range(12, len(ema12)):
-            diff = ema6[i] - ema12[i]
-            if abs(diff) / ((ema6[i] + ema12[i]) / 2.0) < 0.01: # diferenca menor que 1%
+    for i in range(12, len(longTrend)):
+            diff = shortTrend[i] - longTrend[i]
+            if abs(diff) / ((shortTrend[i] + longTrend[i]) / 2.0) < 0.01: # diferenca menor que 1%
                 trend.append('')
             else:
-                trend.append('buy' if ema6[i] > ema12[i] else 'sell')
-        #else:
-        #    trend.append('')
-    ret = { 'date': quote['date'], 'ema-12': ema12, 'ema-6': ema6, 'trend': trend }
+                trend.append('buy' if shortTrend[i] > longTrend[i] else 'sell')
+    ret = { 'date': quote['date'], 'ema-12': longTrend, 'ema-6': shortTrend, 'trend': trend }
     return ret
 
 
 def signal(code):
     """Calculo de sinal de operacao."""
     quote = load_quote_data(code)
-    ema24 = ema(quote, 24)
-    ema12 = ema(quote, 12)
+    longTrend = ema(quote, 24)
+    shortTrend = ema(quote, 12)
     stop = stop_safeplace(quote)
     signal = []
     for i in range(24): # ignorando primeiros dias
         signal.append('')
-    for i in range(24, len(ema24)):
-        diff = ema12[i] - ema24[i]
-        diffOk = abs(diff) / ((ema12[i] + ema24[i]) / 2.0) > 0.01 # diferenca maior que 1%
-        emaOk = True if ema12[i] > ema24[i] else False
+    for i in range(24, len(longTrend)):
+        diff = shortTrend[i] - longTrend[i]
+        diffOk = abs(diff) / ((shortTrend[i] + longTrend[i]) / 2.0) > 0.01 # diferenca maior que 1%
+        emaOk = True if shortTrend[i] > longTrend[i] else False
         stopOk = True if stop[i] < quote['minPrice'][i] else False
         signal.append('buy' if diffOk and emaOk and stopOk else '')
-    ret = { 'date': quote['date'], 'ema-24': ema24, 'ema-12': ema12, 'signal': signal, 'stop': stop, 'min': quote['minPrice'] }
+    ret = { 'date': quote['date'], 'ema-24': longTrend, 'ema-12': shortTrend, 'signal': signal, 'stop': stop, 'min': quote['minPrice'] }
     return ret
 
 
@@ -533,13 +533,14 @@ def calc_money(trades, equity, risk, deposit, wage):
     def calc_trade(maxLoss, trade):
         lossPerUnit = trade.buy - trade.stop
         if lossPerUnit > 0:
-            trade.qtd = int((maxLoss / lossPerUnit) / 100) * 100
+            trade.qtd = round(maxLoss / lossPerUnit, -2)
             cash = trade.qtd * trade.buy
             if cash > (trade.volume / 2):
-                trade.qtd = ( (( trade.volume / trade.buy ) / 2) / 100) * 100 # no maximo compramos metade do book do dia?
+                trade.qtd = round(trade.volume / trade.buy / 2.0, -2) # no maximo compramos metade do book do dia?
         else:
             trade.qtd = 0
 
+    maxDrawDown = 0.10
     ret = []
     begin = trades[0].begin
     end = datetime.date.today()
@@ -556,9 +557,17 @@ def calc_money(trades, equity, risk, deposit, wage):
     print 'Money:'
     topequity = totalequity
     lowequity = totalequity
+    drawdown = 0.0
     investdrawdown = 0.10
     investgrow = 0.50
     for day in ret:
+
+        # define risco atual
+        topequity = max(topequity, totalequity)
+        drawdown = (topequity - totalequity) / topequity
+        percMaxDrawDown = drawdown / maxDrawDown
+        percRisk = 1 - percMaxDrawDown
+        day.risk = risk * percRisk
 
         # seleciona os trades que entram e saem no dia
         day.begin = filter(lambda beg: day.day == beg.begin, trades)
@@ -569,7 +578,7 @@ def calc_money(trades, equity, risk, deposit, wage):
         # para cada entrada, calcula cash envolvido e o resultado total
         day.buy = 0.0
         for trade in day.begin:
-            maxLoss = totalcash * risk
+            maxLoss = totalcash * day.risk
             calc_trade(maxLoss, trade)
             cash = trade.qtd * trade.buy
             if cash <= totalcash:
@@ -590,7 +599,7 @@ def calc_money(trades, equity, risk, deposit, wage):
 
         # se for dia de pagamento, retiramos nosso "salario"...
         if day.day.month == 1 and day.day.day == 1:
-            day.wage = wage(totalequity, risk)
+            day.wage = wage(totalequity, day.risk)
             totalcash -= day.wage
             totalequity -= day.wage
             # ... e separa o valor de reinvestimento (ou investimento)

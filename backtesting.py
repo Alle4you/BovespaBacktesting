@@ -10,6 +10,7 @@ import pickle
 DATA_PATH = 'data'
 QUOTE_FILE_NAME = 'quote'
 QUOTE_WEEK_FILE_NAME = 'week'
+QUOTE_MONTH_FILE_NAME = 'month'
 
 
 def import_quote_from_jgrafix(dataPath):
@@ -49,6 +50,30 @@ def import_quote_from_jgrafix(dataPath):
             upd_week(i) if get_week_quote.currWeekNumber == weekNumber else init_week(i)
         return ret
 
+    def get_month_quote(quote):
+        ret = { 'date': [], 'openPrice': [], 'minPrice': [], 'maxPrice': [], 'closePrice': [], 'volume': [] }
+        get_month_quote.currMonthNumber = 0
+
+        def init_month(quotePos):
+            get_month_quote.currMonthNumber = quote['date'][quotePos].month
+            ret['date'].append(quote['date'][quotePos])
+            ret['openPrice'].append(quote['openPrice'][quotePos])
+            ret['minPrice'].append(quote['minPrice'][quotePos])
+            ret['maxPrice'].append(quote['maxPrice'][quotePos])
+            ret['closePrice'].append(quote['closePrice'][quotePos])
+            ret['volume'].append(quote['volume'][quotePos])
+
+        def upd_month(quotePos):
+            ret['minPrice'][-1] = min(ret['minPrice'][-1], quote['minPrice'][quotePos])
+            ret['maxPrice'][-1] = max(ret['maxPrice'][-1], quote['maxPrice'][quotePos])
+            ret['closePrice'][-1] = quote['closePrice'][quotePos]
+            ret['volume'][-1] += quote['volume'][quotePos]
+
+        for i in range(len(quote['date'])):
+            monthNumber = quote['date'][i].month
+            upd_month(i) if get_month_quote.currMonthNumber == monthNumber else init_month(i)
+        return ret
+
     from os.path import isfile, join
     filterPath = join(DATA_PATH, 'filterCodes')
     quoteDocs = [ f for f in os.listdir(dataPath) if isfile(join(dataPath, f)) ]
@@ -72,6 +97,8 @@ def import_quote_from_jgrafix(dataPath):
             write_data(doc, QUOTE_FILE_NAME, quoteDict)
             weekDict = get_week_quote(quoteDict)
             write_data(doc, QUOTE_WEEK_FILE_NAME, weekDict)
+            monthDict = get_month_quote(quoteDict)
+            write_data(doc, QUOTE_MONTH_FILE_NAME, monthDict)
 
 
 def load_data(code, dataName):
@@ -102,6 +129,10 @@ def load_quote_data(code):
 def load_week_quote_data(code):
     """Carrega historico de cotacao semanal do papel especificado."""
     return load_data(code, QUOTE_WEEK_FILE_NAME)
+
+def load_month_quote_data(code):
+    """Carrega historico de cotacao mensal do papel especificado."""
+    return load_data(code, QUOTE_MONTH_FILE_NAME)
 
 def load_known_codes():
     """Retorna a lista de papeis conhecidos."""

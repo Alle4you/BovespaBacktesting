@@ -353,6 +353,34 @@ def trend(code):
     return ret
 
 
+class Trend:
+    def __init__(self, quoteResolution = 'week', getLongTrend = ema, getShortTrend = ema, 
+                longTrendResolution = 12, shortTrendResolution = 6):
+        self.quoteResolution = quoteResolution
+        self.getLongTrend = getLongTrend
+        self.getShortTrend = getShortTrend
+        self.longTrendResolution = longTrendResolution
+        self.shortTrendResolution = shortTrendResolution
+
+    def calc(self, code):
+        """Calculo de tendencia (definindo funcoes para tendencia de longo e curto prazos)."""
+
+        quote = load_data(code, self.quoteResolution)
+        longTrend = self.getLongTrend(quote, self.longTrendResolution)
+        shortTrend = self.getShortTrend(quote, self.shortTrendResolution)
+        trend = []
+        for i in range(self.longTrendResolution): # ignorando primeiros periodos
+            trend.append('')
+        for i in range(self.longTrendResolution, len(longTrend)):
+                diff = shortTrend[i] - longTrend[i]
+                if abs(diff) / ((shortTrend[i] + longTrend[i]) / 2.0) < 0.01: # diferenca menor que 1%
+                    trend.append('')
+                else:
+                    trend.append('buy' if shortTrend[i] > longTrend[i] else 'sell')
+        ret = { 'date': quote['date'], 'longTrend': longTrend, 'shortTrend': shortTrend, 'trend': trend }
+        return ret
+
+
 def signal(code):
     """Calculo de sinal de operacao."""
     quote = load_quote_data(code)
@@ -372,11 +400,40 @@ def signal(code):
     return ret
 
 
-def calc_trades(code):
+class Signal:
+    def __init__(self, quoteResolution = 'quote', getLongSignal = ema, getShortSignal = ema, 
+                longSignalResolution = 24, shortSignalResolution = 12, getStop = stop_safeplace):
+        self.quoteResolution = quoteResolution
+        self.getLongSignal = getLongSignal
+        self.getShortSignal = getShortSignal
+        self.longSignalResolution = longSignalResolution
+        self.shortSignalResolution = shortSignalResolution
+        self.getStop = stop_safeplace
+
+    def calc(self, code):
+        """Calculo de sinal de operacao."""
+        quote = load_quote_data(code)
+        longSignal = self.getLongSignal(quote, self.longSignalResolution)
+        shortSignal = self.getShortSignal(quote, self.shortSignalResolution)
+        stop = self.getStop(quote)
+        signal = []
+        for i in range(self.longSignalResolution): # ignorando primeiros dias
+            signal.append('')
+        for i in range(self.longSignalResolution, len(longSignal)):
+            diff = shortSignal[i] - longSignal[i]
+            diffOk = abs(diff) / ((shortSignal[i] + longSignal[i]) / 2.0) > 0.01 # diferenca maior que 1%
+            signalOk = True if shortSignal[i] > longSignal[i] else False
+            stopOk = True if stop[i] < quote['minPrice'][i] else False
+            signal.append('buy' if diffOk and signalOk and stopOk else '')
+        ret = { 'date': quote['date'], 'longSignal': longSignal, 'shortSignal': shortSignal, 'signal': signal, 'stop': stop, 'min': quote['minPrice'] }
+        return ret
+
+
+def calc_trades(code, trend, signal):
     ret = []
     quote = load_quote_data(code)
-    code_trend = trend(code)
-    code_signal = signal(code)
+    code_trend = trend.calc(code)
+    code_signal = signal.calc(code)
     tradeCount = 0
 
     for week in range(24, len(code_trend['trend'])):
@@ -452,9 +509,12 @@ def calc_all_trades():
     ret = []
     codes = load_known_codes()
 
+    trend = Trend('week', ema, ema, 12, 6)
+    signal = Signal('quote', ema, ema, 24, 12, stop_safeplace)
+
     for code in codes:
         print 'BackTesting: ' + code
-        ret = ret + calc_trades(code)
+        ret = ret + calc_trades(code, trend, signal)
     ret = sorted(ret, key = lambda trade: trade.begin)
     for i in range(len(ret)): # para cada posicao com data de entrada e saida distintas
         ret[i].trade = i
